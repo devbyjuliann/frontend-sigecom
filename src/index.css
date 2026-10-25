@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+:root {
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color: #172033;
+  background: #f6f8fc;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --brand-primary: #1f3a8a;
+  --brand-interactive: #2563eb;
+  --brand-dark: #102857;
+  --surface: #fff;
+  --text-secondary: #64748b;
+  --border: #e2e8f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}
+.shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+.service-panel {
+  width: min(100%, 520px);
+  padding: clamp(28px, 7vw, 56px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 12px 36px rgb(16 40 87 / 7%);
+}
+.brand-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--brand-primary);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+}
+.eyebrow {
+  margin: 28px 0 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+h1 {
+  margin: 0;
+  color: var(--brand-primary);
+  font-size: clamp(32px, 7vw, 42px);
+  letter-spacing: -0.04em;
+}
+.subtitle {
+  margin: 8px 0 28px;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+.connection {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f6f8fc;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.connection__indicator {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+.connection--ok .connection__indicator {
+  background: #15803d;
+}
+.connection--error .connection__indicator {
+  background: #b91c1c;
+}
+.service-name {
+  margin: 16px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .connection__indicator {
+    transition: background-color 160ms ease;
+  }
+}
