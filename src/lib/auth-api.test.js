@@ -116,4 +116,82 @@ describe("authApi", () => {
       authApi.login({ email: "seller@example.invalid", password: "private" }),
     ).rejects.toMatchObject({ status: 0, code: "NETWORK_ERROR" });
   });
+
+  it("posts password updates with CSRF and exposes only the safe result", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ csrfToken: "f".repeat(64) }, { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ changed: true, revokedSessions: 2 }, { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await expect(
+      authApi.changePassword({
+        currentPassword: "old private password",
+        newPassword: "New-Strong-Password-2026",
+        confirmPassword: "New-Strong-Password-2026",
+      }),
+    ).resolves.toEqual({ changed: true, revokedSessions: 2 });
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/auth/change-password",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: expect.objectContaining({ "X-CSRF-Token": "f".repeat(64) }),
+      }),
+    );
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("loads the own profile and patches only through the CSRF-protected API", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ csrfToken: "g".repeat(64) }, { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "7",
+          email: "seller@example.invalid",
+          displayName: "Vendedor",
+          role: "seller",
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "7",
+          email: "seller@example.invalid",
+          displayName: "Nombre nuevo",
+          role: "seller",
+        }),
+      );
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await expect(authApi.getProfile()).resolves.toMatchObject({
+      displayName: "Vendedor",
+    });
+    await expect(
+      authApi.updateProfile({ displayName: "Nombre nuevo" }),
+    ).resolves.toMatchObject({ displayName: "Nombre nuevo" });
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/profile",
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/profile",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({ "X-CSRF-Token": "g".repeat(64) }),
+        body: JSON.stringify({ displayName: "Nombre nuevo" }),
+      }),
+    );
+  });
 });

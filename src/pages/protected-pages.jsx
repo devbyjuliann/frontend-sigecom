@@ -4,6 +4,7 @@ import { ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { SignOut } from "@phosphor-icons/react/SignOut";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/auth-context.jsx";
+import PasswordChangeForm from "../components/password-change-form.jsx";
 import { Button } from "../components/ui/button.jsx";
 
 const roleNames = {
@@ -88,7 +89,7 @@ export function AccessDeniedPage() {
 }
 
 export function RequiredPasswordPage() {
-  const { session, logout } = useAuth();
+  const { session, logout, changePassword, isChangingPassword } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState("");
 
@@ -102,6 +103,14 @@ export function RequiredPasswordPage() {
         "No se pudo confirmar el cierre de sesión. Comprueba la conexión.",
       );
     }
+  }
+
+  async function handlePasswordChange(values) {
+    await changePassword(values);
+    navigate("/ingresar", {
+      replace: true,
+      state: { passwordChanged: true },
+    });
   }
 
   return (
@@ -119,14 +128,15 @@ export function RequiredPasswordPage() {
         <p className="welcome-label">Acción requerida</p>
         <h1 id="required-password-title">Debes cambiar tu contraseña</h1>
         <p>
-          La cuenta de {session.user.email} requiere actualizar la contraseña
-          antes de usar las funciones del sistema. El acceso operativo permanece
-          bloqueado hasta completar este cambio.
+          La cuenta de {session.user.email} debe actualizar la contraseña antes
+          de usar SIGECOM. Al completar el cambio, tendrás que iniciar sesión de
+          nuevo.
         </p>
-        <div className="required-password-notice" role="status">
-          El cambio de contraseña estará disponible en una próxima
-          actualización. Contacta al administrador para recibir asistencia.
-        </div>
+        <PasswordChangeForm
+          onSubmit={handlePasswordChange}
+          isSubmitting={isChangingPassword}
+          submitLabel="Cambiar contraseña y continuar"
+        />
         <Button
           variant="secondary"
           className="required-password-logout"

@@ -8,6 +8,7 @@ import { House } from "@phosphor-icons/react/House";
 import { List } from "@phosphor-icons/react/List";
 import { MagnifyingGlass } from "@phosphor-icons/react/MagnifyingGlass";
 import { SignOut } from "@phosphor-icons/react/SignOut";
+import { UserCircle } from "@phosphor-icons/react/UserCircle";
 import { X } from "@phosphor-icons/react/X";
 import {
   Link,
@@ -28,6 +29,11 @@ const navigation = [
     icon: House,
   },
 ];
+const profileDestination = {
+  label: "Mi perfil",
+  path: "/perfil",
+  permission: "profile.read",
+};
 
 const roleNames = {
   administrator: "Administrador",
@@ -92,14 +98,9 @@ function SearchNavigation({ destinations, onNavigate }) {
         placeholder="Buscar una página…"
       />
       {open && query.trim() ? (
-        <div
-          className="search-results"
-          id="navigation-search-results"
-          role="listbox"
-          aria-label="Páginas disponibles"
-        >
+        <div className="search-results" id="navigation-search-results">
           {matches.length ? (
-            <ul>
+            <ul aria-label="Páginas disponibles">
               {matches.map((item) => (
                 <li key={item.path}>
                   <Link
@@ -133,7 +134,6 @@ function SidebarContent({
   const destinations = navigation.filter((item) =>
     session.permissions.includes(item.permission),
   );
-
   return (
     <>
       <div className="sidebar-brand-row">
@@ -250,6 +250,14 @@ function UserMenu() {
               <small>{roleNames[user.role] || "Usuario"}</small>
             </DropdownMenu.Label>
             <DropdownMenu.Separator className="dropdown-separator" />
+            {session.permissions.includes("profile.read") ? (
+              <DropdownMenu.Item asChild>
+                <Link className="dropdown-item" to="/perfil">
+                  <UserCircle size={17} aria-hidden="true" />
+                  Mi perfil
+                </Link>
+              </DropdownMenu.Item>
+            ) : null}
             <DropdownMenu.Item
               className="dropdown-item"
               onSelect={handleLogout}
@@ -274,9 +282,15 @@ export default function AppShell() {
   const destinations = navigation.filter((item) =>
     session.permissions.includes(item.permission),
   );
+  const searchableDestinations = [
+    ...destinations,
+    ...(session.permissions.includes(profileDestination.permission)
+      ? [profileDestination]
+      : []),
+  ];
   const pageTitle =
     destinations.find((item) => item.path === location.pathname)?.label ||
-    "SIGECOM";
+    (location.pathname === "/perfil" ? "Mi perfil" : "SIGECOM");
   const sidebarWidth = collapsed ? 76 : 248;
 
   return (
@@ -346,7 +360,7 @@ export default function AppShell() {
               </div>
               <div className="topbar-tools">
                 <SearchNavigation
-                  destinations={destinations}
+                  destinations={searchableDestinations}
                   onNavigate={navigate}
                 />
                 <UserMenu />

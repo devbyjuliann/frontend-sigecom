@@ -2,9 +2,11 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { provisionTestAccounts } from "./support/database-fixture.mjs";
 
 const sellerEmail = "frontend-e2e@sigecom.invalid";
 const forcedEmail = "frontend-e2e-forced@sigecom.invalid";
+const profileEmail = "frontend-e2e-profile@sigecom.invalid";
 const password = process.env.SIGECOM_E2E_PASSWORD;
 const screenshotDirectory = join(tmpdir(), "opencode", "sigecom-1.4-visual");
 
@@ -15,9 +17,13 @@ test.beforeEach(async ({ page }) => {
   ).toBeVisible();
 });
 
-async function signIn(page, email = sellerEmail) {
+async function signIn(
+  page,
+  email = sellerEmail,
+  passwordValue = process.env.SIGECOM_E2E_PASSWORD,
+) {
   await page.getByLabel("Correo electrónico").fill(email);
-  await page.getByRole("textbox", { name: "Contraseña" }).fill(password);
+  await page.getByRole("textbox", { name: "Contraseña" }).fill(passwordValue);
   await page.getByRole("button", { name: "Ingresar" }).click();
 }
 
@@ -223,9 +229,88 @@ test("mantiene bloqueadas las operaciones mientras el cambio de contraseña sea 
   await page.goto("/inicio");
   await expect(page).toHaveURL(/\/cambio-obligatorio$/);
   await expect(page.getByRole("link", { name: "Inicio" })).toHaveCount(0);
+
+  const profileAttempt = await page.request.get("/api/v1/profile");
+  expect(profileAttempt.status()).toBe(403);
+  expect((await profileAttempt.json()).error.code).toBe(
+    "PASSWORD_CHANGE_REQUIRED",
+  );
+
+  const newPassword = "Cambio-Seguro-2026!Aa";
+  await page.getByLabel("Contraseña actual").fill(password);
+  await page.getByLabel("Nueva contraseña", { exact: true }).fill(newPassword);
+  await page.getByLabel("Confirmar nueva contraseña").fill(newPassword);
+  await page
+    .getByRole("button", { name: "Cambiar contraseña y continuar" })
+    .click();
+  await expect(page).toHaveURL(/\/ingresar$/);
+  await expect(page.getByRole("status")).toContainText(
+    "Ingresa con tu nueva contraseña",
+  );
+
+  await page.getByLabel("Correo electrónico").fill(forcedEmail);
+  await page.getByRole("textbox", { name: "Contraseña" }).fill(password);
+  await page.getByRole("button", { name: "Ingresar" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Correo o contraseña incorrectos.",
+  );
+
+  await signIn(page, forcedEmail, newPassword);
+  await expect(page).toHaveURL(/\/inicio$/);
   await expect(
-    page.getByText(/acceso operativo permanece bloqueado/i),
+    page.getByRole("heading", {
+      name: "Bienvenido, Cuenta con cambio obligatorio",
+    }),
   ).toBeVisible();
+});
+
+test("edita el perfil propio y cambia la contraseña desde el perfil", async ({
+  page,
+}) => {
+  const newPassword = "Perfil-Seguro-2026!Aa";
+  await signIn(page, profileEmail);
+  await expect(page).toHaveURL(/\/inicio$/);
+  await page
+    .getByRole("button", {
+      name: "Menú de usuario: Cuenta de perfil de pruebas",
+    })
+    .click();
+  await page.getByRole("menuitem", { name: "Mi perfil" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Datos personales" }),
+  ).toBeVisible();
+
+  const displayName = page.getByLabel("Nombre para mostrar");
+  await displayName.fill("Perfil editado en pruebas");
+  await page.getByRole("button", { name: "Guardar cambios" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Tus datos personales se guardaron.",
+  );
+  await page.reload();
+  await expect(displayName).toHaveValue("Perfil editado en pruebas");
+
+  await page.getByLabel("Contraseña actual").fill(password);
+  await page.getByLabel("Nueva contraseña", { exact: true }).fill(newPassword);
+  await page.getByLabel("Confirmar nueva contraseña").fill(newPassword);
+  await page.getByRole("button", { name: "Actualizar contraseña" }).click();
+  await expect(page).toHaveURL(/\/ingresar$/);
+  await expect(page.getByRole("status")).toContainText(
+    "Ingresa con tu nueva contraseña",
+  );
+
+  await page.getByLabel("Correo electrónico").fill(profileEmail);
+  await page.getByRole("textbox", { name: "Contraseña" }).fill(password);
+  await page.getByRole("button", { name: "Ingresar" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Correo o contraseña incorrectos.",
+  );
+
+  await signIn(page, profileEmail, newPassword);
+  await expect(page).toHaveURL(/\/inicio$/);
+  await page.goto("/perfil");
+  await expect(page.getByLabel("Nombre para mostrar")).toHaveValue(
+    "Perfil editado en pruebas",
+  );
 });
 
 test("login y layout no desbordan y se capturan en las resoluciones requeridas", async ({
@@ -275,6 +360,49 @@ test("login y layout no desbordan y se capturan en las resoluciones requeridas",
       path: join(
         screenshotDirectory,
         `inicio-${viewport.width}x${viewport.height}.png`,
+      ),
+      fullPage: true,
+    });
+  }
+
+  await page.goto("/perfil");
+  await expect(
+    page.getByRole("heading", { name: "Datos personales" }),
+  ).toBeVisible();
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(
+        screenshotDirectory,
+        `perfil-${viewport.width}x${viewport.height}.png`,
+      ),
+      fullPage: true,
+    });
+  }
+
+  await page.getByRole("button", { name: /Menú de usuario:/ }).click();
+  await page.getByRole("menuitem", { name: "Cerrar sesión" }).click();
+  await expect(page).toHaveURL(/\/ingresar$/);
+  await provisionTestAccounts();
+  await page.goto("/ingresar");
+  await signIn(page, forcedEmail);
+  await expect(page).toHaveURL(/\/cambio-obligatorio$/);
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(
+        screenshotDirectory,
+        `cambio-obligatorio-${viewport.width}x${viewport.height}.png`,
       ),
       fullPage: true,
     });

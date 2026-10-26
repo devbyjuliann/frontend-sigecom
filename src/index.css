@@ -876,6 +876,112 @@ p {
   width: 100%;
   margin-top: 20px;
 }
+.profile-page {
+  display: grid;
+  gap: 22px;
+}
+.profile-page-heading h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.profile-page-heading > div > p:last-child {
+  margin: 7px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+}
+.profile-card {
+  min-width: 0;
+  padding: clamp(20px, 2.5vw, 28px);
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgb(16 40 87 / 4%);
+}
+.profile-card-heading {
+  padding-bottom: 17px;
+  border-bottom: 1px solid #e8edf4;
+}
+.profile-card-heading h3 {
+  margin: 0;
+  color: #172033;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.profile-card-heading p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.profile-form {
+  display: grid;
+  gap: 17px;
+  padding-top: 19px;
+}
+.profile-form > button {
+  justify-self: start;
+}
+.profile-form > button:disabled {
+  cursor: not-allowed;
+}
+.field-hint {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.profile-success {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.login-password-success {
+  width: min(100%, 410px);
+  margin: 0 auto 18px;
+}
+.profile-state {
+  display: grid;
+  min-height: 250px;
+  justify-items: start;
+  align-content: center;
+  gap: 12px;
+  padding: 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  background: #fff;
+  color: #526078;
+  font-size: 13px;
+}
+.profile-state h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+}
+.profile-state p {
+  margin: 0;
+  line-height: 1.6;
+}
+.required-password-card .profile-form {
+  margin-top: 20px;
+}
+.required-password-card .profile-form > button {
+  width: 100%;
+  justify-self: stretch;
+}
 .required-password-foot {
   margin: 19px 0 0;
   color: #64748b;
@@ -948,6 +1054,19 @@ p {
     width: 100%;
     margin-top: auto;
     padding-top: 38px;
+  }
+}
+
+@media (max-width: 760px) {
+  .profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .profile-card {
+    padding: 20px;
+  }
+  .required-password-card .profile-form {
+    gap: 15px;
   }
 }
 

@@ -28,6 +28,12 @@ export const testAccounts = [
     role: "seller",
     passwordChangeRequired: true,
   },
+  {
+    email: "frontend-e2e-profile@sigecom.invalid",
+    name: "Cuenta de perfil de pruebas",
+    role: "seller",
+    passwordChangeRequired: false,
+  },
 ];
 
 export async function provisionTestAccounts() {

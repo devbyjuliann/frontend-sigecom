@@ -9,7 +9,7 @@ const port = Number(process.env.SIGECOM_E2E_API_PORT || 3002);
 const dbPool = createDatabasePool("test");
 const authConfig = getAuthConfig({
   ...process.env,
-  FRONTEND_ORIGIN: "http://127.0.0.1:5173",
+  FRONTEND_ORIGIN: `http://127.0.0.1:${process.env.SIGECOM_E2E_FRONTEND_PORT || 5173}`,
   AUTH_RATE_LIMIT_MAX: "20",
 });
 

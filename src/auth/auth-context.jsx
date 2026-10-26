@@ -36,6 +36,14 @@ export function AuthProvider({ children }) {
     },
   });
 
+  const passwordChangeMutation = useMutation({
+    mutationFn: authApi.changePassword,
+    onSuccess: () => {
+      queryClient.clear();
+      setLocallyLoggedOut(true);
+    },
+  });
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -58,6 +66,8 @@ export function AuthProvider({ children }) {
       login: loginMutation.mutateAsync,
       isLoggingIn: loginMutation.isPending,
       loginError: loginMutation.error || null,
+      changePassword: passwordChangeMutation.mutateAsync,
+      isChangingPassword: passwordChangeMutation.isPending,
       logout,
       reloadSession: sessionQuery.refetch,
     }),
@@ -70,6 +80,8 @@ export function AuthProvider({ children }) {
       loginMutation.mutateAsync,
       loginMutation.isPending,
       loginMutation.error,
+      passwordChangeMutation.mutateAsync,
+      passwordChangeMutation.isPending,
       logout,
     ],
   );

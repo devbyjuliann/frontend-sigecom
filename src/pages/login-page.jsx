@@ -117,6 +117,13 @@ export default function LoginPage() {
             <p>Ingresa con las credenciales asignadas por tu administrador.</p>
           </div>
 
+          {location.state?.passwordChanged ? (
+            <p className="profile-success login-password-success" role="status">
+              La contraseña se actualizó y las sesiones anteriores se cerraron.
+              Ingresa con tu nueva contraseña.
+            </p>
+          ) : null}
+
           <form
             className="login-form"
             onSubmit={form.handleSubmit(onSubmit)}

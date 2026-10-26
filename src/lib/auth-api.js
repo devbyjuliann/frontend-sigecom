@@ -98,6 +98,31 @@ async function get(path) {
   return readResponse(response);
 }
 
+async function patch(path, body) {
+  const token = csrfToken || (await getCsrfToken());
+  let response;
+  try {
+    response = await fetch(path, {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": token,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      code: "NETWORK_ERROR",
+      message:
+        "No se pudo conectar con SIGECOM. Verifica la conexión e inténtalo de nuevo.",
+    });
+  }
+  return readResponse(response);
+}
+
 export const authApi = {
   async login(credentials) {
     await getCsrfToken();
@@ -108,6 +133,19 @@ export const authApi = {
   async me() {
     const payload = await get("/api/v1/auth/me");
     return payload;
+  },
+  async changePassword(input) {
+    try {
+      return await post("/api/v1/auth/change-password", input);
+    } finally {
+      csrfToken = "";
+    }
+  },
+  async getProfile() {
+    return get("/api/v1/profile");
+  },
+  async updateProfile(input) {
+    return patch("/api/v1/profile", input);
   },
   async logout() {
     try {
