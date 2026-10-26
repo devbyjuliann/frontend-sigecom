@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { authApi } from "./auth-api.js";
+import { authApi, categoriesApi } from "./auth-api.js";
 
 describe("authApi", () => {
   afterEach(() => {
@@ -191,6 +191,39 @@ describe("authApi", () => {
         method: "PATCH",
         headers: expect.objectContaining({ "X-CSRF-Token": "g".repeat(64) }),
         body: JSON.stringify({ displayName: "Nombre nuevo" }),
+      }),
+    );
+  });
+
+  it("uses the authenticated API for category search and mutations", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ csrfToken: "h".repeat(64) }, { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ items: [], pagination: { page: 1 } }),
+      )
+      .mockResolvedValueOnce(Response.json({ id: "1", name: "Aseo" }));
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await categoriesApi.list({ q: "aseo", status: "active", page: 2 });
+    await categoriesApi.create({ name: "Aseo", description: null });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/categories?q=aseo&status=active&page=2",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/categories",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: expect.objectContaining({ "X-CSRF-Token": "h".repeat(64) }),
+        body: JSON.stringify({ name: "Aseo", description: null }),
       }),
     );
   });

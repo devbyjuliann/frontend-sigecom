@@ -17,6 +17,18 @@ const { createDatabasePool } = await import(
 
 export const testAccounts = [
   {
+    email: "frontend-e2e-admin@sigecom.invalid",
+    name: "Administrador de pruebas",
+    role: "administrator",
+    passwordChangeRequired: false,
+  },
+  {
+    email: "frontend-e2e-category-seller@sigecom.invalid",
+    name: "Vendedor de categorías de prueba",
+    role: "seller",
+    passwordChangeRequired: false,
+  },
+  {
     email: "frontend-e2e@sigecom.invalid",
     name: "Vendedor de pruebas",
     role: "seller",
@@ -37,7 +49,8 @@ export const testAccounts = [
 ];
 
 export async function provisionTestAccounts() {
-  const password = randomBytes(32).toString("base64url");
+  const password =
+    process.env.SIGECOM_E2E_PASSWORD || randomBytes(32).toString("base64url");
   const passwordHash = await bcrypt.hash(password, 12);
   const pool = createDatabasePool("test");
 

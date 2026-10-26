@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CaretLeft } from "@phosphor-icons/react/CaretLeft";
+import { Tag } from "@phosphor-icons/react/Tag";
 import { House } from "@phosphor-icons/react/House";
 import { List } from "@phosphor-icons/react/List";
 import { MagnifyingGlass } from "@phosphor-icons/react/MagnifyingGlass";
@@ -27,6 +28,12 @@ const navigation = [
     path: "/inicio",
     permission: "dashboard.read",
     icon: House,
+  },
+  {
+    label: "Categorías",
+    path: "/categorias",
+    permission: "categories.read",
+    icon: Tag,
   },
 ];
 const profileDestination = {
