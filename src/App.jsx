@@ -1,59 +1,101 @@
-import { useEffect, useState } from "react";
-import "./index.css";
+import { lazy, Suspense } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import { Toaster } from "sonner";
+import { AuthProvider } from "./auth/auth-context.jsx";
+import {
+  RedirectIfAuthenticated,
+  RequireAuth,
+  RequirePermission,
+} from "./auth/route-guards.jsx";
 
-export default function App() {
-  const [connection, setConnection] = useState({
-    status: "loading",
-    service: "",
-  });
+const AppShell = lazy(() => import("./components/app-shell.jsx"));
+const LoginPage = lazy(() => import("./pages/login-page.jsx"));
+const HomePage = lazy(() =>
+  import("./pages/protected-pages.jsx").then((pages) => ({
+    default: pages.HomePage,
+  })),
+);
+const AccessDeniedPage = lazy(() =>
+  import("./pages/protected-pages.jsx").then((pages) => ({
+    default: pages.AccessDeniedPage,
+  })),
+);
+const RequiredPasswordPage = lazy(() =>
+  import("./pages/protected-pages.jsx").then((pages) => ({
+    default: pages.RequiredPasswordPage,
+  })),
+);
 
-  useEffect(() => {
-    const controller = new AbortController();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,
+      retry: 1,
+    },
+  },
+});
 
-    fetch("/api/v1/health", { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("La API no está disponible.");
-        return response.json();
-      })
-      .then((data) =>
-        setConnection({ status: data.status, service: data.service }),
-      )
-      .catch((error) => {
-        if (error.name !== "AbortError")
-          setConnection({ status: "error", service: "" });
-      });
-
-    return () => controller.abort();
-  }, []);
-
-  const apiMessage = {
-    loading: "Comprobando la conexión con la API…",
-    ok: "Frontend y backend se comunican correctamente.",
-    error:
-      "No se pudo conectar con la API. Comprueba que el backend esté iniciado.",
-  }[connection.status];
-
+function NotFoundPage() {
   return (
-    <main className="shell">
-      <section className="service-panel" aria-labelledby="service-title">
-        <div className="brand-mark" aria-hidden="true">
-          S
-        </div>
-        <p className="eyebrow">Comercializadora S.A.S.</p>
-        <h1 id="service-title">SIGECOM</h1>
-        <p className="subtitle">Sistema de Gestión Comercial</p>
-        <div
-          className={`connection connection--${connection.status}`}
-          role="status"
-          aria-live="polite"
-        >
-          <span className="connection__indicator" aria-hidden="true" />
-          <span>{apiMessage}</span>
-        </div>
-        {connection.service && (
-          <p className="service-name">Servicio: {connection.service}</p>
-        )}
+    <main className="standalone-state">
+      <section className="standalone-card">
+        <p className="welcome-label">Página no disponible</p>
+        <h1>No encontramos esta página</h1>
+        <p>Comprueba la dirección o vuelve a Inicio.</p>
+        <Link className="text-link" to="/inicio">
+          Volver a Inicio
+        </Link>
       </section>
     </main>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Suspense
+      fallback={
+        <main className="grid min-h-screen place-items-center bg-page text-sm text-muted">
+          Cargando SIGECOM…
+        </main>
+      }
+    >
+      <Routes>
+        <Route element={<RedirectIfAuthenticated />}>
+          <Route path="/ingresar" element={<LoginPage />} />
+        </Route>
+        <Route element={<RequireAuth />}>
+          <Route
+            path="/cambio-obligatorio"
+            element={<RequiredPasswordPage />}
+          />
+          <Route path="/acceso-denegado" element={<AccessDeniedPage />} />
+          <Route element={<RequirePermission permission="dashboard.read" />}>
+            <Route element={<AppShell />}>
+              <Route path="/inicio" element={<HomePage />} />
+            </Route>
+          </Route>
+          <Route path="/" element={<Navigate to="/inicio" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+    </Suspense>
+  );
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+          <Toaster
+            position="bottom-right"
+            closeButton
+            toastOptions={{ className: "sigecom-toast" }}
+          />
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
