@@ -19,6 +19,7 @@ export default function DataTable({
   loadingLabel = "Cargando datos…",
   emptyState,
   emptyLabel = "No hay registros para mostrar.",
+  regionLabel = "Tabla de datos",
 }) {
   // TanStack Table returns a mutable table controller by design; keep it out of React Compiler memoization.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -61,7 +62,7 @@ export default function DataTable({
         <div
           className="data-table-scroll"
           role="region"
-          aria-label="Categorías"
+          aria-label={regionLabel}
           tabIndex={0}
         >
           <p className="table-scroll-hint">

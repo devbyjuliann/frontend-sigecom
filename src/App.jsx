@@ -28,6 +28,7 @@ const RequiredPasswordPage = lazy(() =>
 );
 const ProfilePage = lazy(() => import("./pages/profile-page.jsx"));
 const CategoriesPage = lazy(() => import("./pages/categories-page.jsx"));
+const WarehousesPage = lazy(() => import("./pages/warehouses-page.jsx"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,6 +86,11 @@ function AppRoutes() {
           <Route element={<RequirePermission permission="categories.read" />}>
             <Route element={<AppShell />}>
               <Route path="/categorias" element={<CategoriesPage />} />
+            </Route>
+          </Route>
+          <Route element={<RequirePermission permission="warehouses.read" />}>
+            <Route element={<AppShell />}>
+              <Route path="/bodegas" element={<WarehousesPage />} />
             </Route>
           </Route>
           <Route path="/" element={<Navigate to="/inicio" replace />} />

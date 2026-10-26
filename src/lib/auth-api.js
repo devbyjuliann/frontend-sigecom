@@ -185,3 +185,36 @@ export const categoriesApi = {
     });
   },
 };
+
+export const warehousesApi = {
+  list(filters = {}) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== null && value !== "") {
+        search.set(key, String(value));
+      }
+    }
+    const query = search.toString();
+    return get(`/api/v1/warehouses${query ? `?${query}` : ""}`);
+  },
+  get(id) {
+    return get(`/api/v1/warehouses/${encodeURIComponent(id)}`);
+  },
+  responsibles(query = "") {
+    const search = new URLSearchParams();
+    if (query) search.set("q", query);
+    const suffix = search.toString();
+    return get(`/api/v1/warehouses/responsibles${suffix ? `?${suffix}` : ""}`);
+  },
+  create(input) {
+    return post("/api/v1/warehouses", input);
+  },
+  update(id, input) {
+    return patch(`/api/v1/warehouses/${encodeURIComponent(id)}`, input);
+  },
+  setStatus(id, isActive) {
+    return patch(`/api/v1/warehouses/${encodeURIComponent(id)}/status`, {
+      isActive,
+    });
+  },
+};

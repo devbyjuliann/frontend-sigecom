@@ -344,6 +344,7 @@ export default function CategoriesPage() {
           <DataTable
             columns={columns}
             data={result?.items || []}
+            regionLabel="Categorías"
             page={page}
             pageSize={pageSize}
             total={result?.pagination.total || 0}

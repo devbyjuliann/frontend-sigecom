@@ -1576,6 +1576,48 @@ p {
 .module-textarea[aria-invalid="true"] {
   border-color: #b42318;
 }
+.module-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #d5deeb;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  font-size: 13px;
+}
+.module-select:focus-visible {
+  border-color: #2563eb;
+  outline: 2px solid rgb(37 99 235 / 24%);
+  outline-offset: 1px;
+}
+.warehouse-details {
+  display: grid;
+  gap: 14px;
+  margin: 8px 0 0;
+}
+.warehouse-code {
+  white-space: nowrap;
+}
+.warehouse-details > div {
+  display: grid;
+  grid-template-columns: minmax(115px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid #edf1f6;
+}
+.warehouse-details dt {
+  color: #64748b;
+  font-size: 12px;
+}
+.warehouse-details dd {
+  min-width: 0;
+  margin: 0;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
 .module-dialog__actions {
   display: flex;
   justify-content: flex-end;

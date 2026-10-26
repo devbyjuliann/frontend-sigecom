@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { authApi, categoriesApi } from "./auth-api.js";
+import { authApi, categoriesApi, warehousesApi } from "./auth-api.js";
 
 describe("authApi", () => {
   afterEach(() => {
@@ -224,6 +224,69 @@ describe("authApi", () => {
         credentials: "include",
         headers: expect.objectContaining({ "X-CSRF-Token": "h".repeat(64) }),
         body: JSON.stringify({ name: "Aseo", description: null }),
+      }),
+    );
+  });
+
+  it("uses the authenticated API for warehouse details, responsible users, and mutations", async () => {
+    const csrfToken = "w".repeat(64);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken }))
+      .mockResolvedValueOnce(
+        Response.json({ items: [], pagination: { page: 1 } }),
+      )
+      .mockResolvedValueOnce(Response.json({ id: "42", code: "BOD-42" }))
+      .mockResolvedValueOnce(
+        Response.json({ items: [{ id: "9", name: "Ana" }] }),
+      )
+      .mockResolvedValueOnce(Response.json({ id: "42", code: "BOD-42" }))
+      .mockResolvedValueOnce(Response.json({ id: "42", code: "BOD-42" }))
+      .mockResolvedValueOnce(Response.json({ id: "42", isActive: false }));
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await warehousesApi.list({ q: "BOD", status: "active", page: 2 });
+    await warehousesApi.get("42");
+    await warehousesApi.responsibles("Ana");
+    await warehousesApi.create({ code: "BOD-42", name: "Principal" });
+    await warehousesApi.update("42", { code: "BOD-42", name: "Central" });
+    await warehousesApi.setStatus("42", false);
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/warehouses?q=BOD&status=active&page=2",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/warehouses/42",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/warehouses/responsibles?q=Ana",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      5,
+      "/api/v1/warehouses",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "X-CSRF-Token": csrfToken }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      6,
+      "/api/v1/warehouses/42",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      7,
+      "/api/v1/warehouses/42/status",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ isActive: false }),
       }),
     );
   });
