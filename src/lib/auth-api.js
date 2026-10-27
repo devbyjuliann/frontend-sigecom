@@ -218,3 +218,33 @@ export const warehousesApi = {
     });
   },
 };
+
+export const productsApi = {
+  list(filters = {}) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== null && value !== "") {
+        search.set(key, String(value));
+      }
+    }
+    const query = search.toString();
+    return get(`/api/v1/products${query ? `?${query}` : ""}`);
+  },
+  get(id) {
+    return get(`/api/v1/products/${encodeURIComponent(id)}`);
+  },
+  balances(id, warehouseId) {
+    const search = new URLSearchParams();
+    if (warehouseId) search.set("warehouseId", warehouseId);
+    const query = search.toString();
+    return get(
+      `/api/v1/products/${encodeURIComponent(id)}/balances${query ? `?${query}` : ""}`,
+    );
+  },
+  create(input) {
+    return post("/api/v1/products", input);
+  },
+  update(id, input) {
+    return patch(`/api/v1/products/${encodeURIComponent(id)}`, input);
+  },
+};

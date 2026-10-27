@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { authApi, categoriesApi, warehousesApi } from "./auth-api.js";
+import {
+  authApi,
+  categoriesApi,
+  productsApi,
+  warehousesApi,
+} from "./auth-api.js";
 
 describe("authApi", () => {
   afterEach(() => {
@@ -288,6 +293,55 @@ describe("authApi", () => {
         method: "PATCH",
         body: JSON.stringify({ isActive: false }),
       }),
+    );
+  });
+
+  it("uses authenticated product endpoints and scopes balance filters", async () => {
+    const csrfToken = "p".repeat(64);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken }))
+      .mockResolvedValueOnce(Response.json({ items: [], pagination: {} }))
+      .mockResolvedValueOnce(Response.json({ id: "51", sku: "SKU-51" }))
+      .mockResolvedValueOnce(Response.json({ productId: "51", items: [] }))
+      .mockResolvedValueOnce(Response.json({ id: "52", sku: "SKU-52" }))
+      .mockResolvedValueOnce(Response.json({ id: "51", sku: "SKU-51" }));
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await productsApi.list({ q: "SKU", categoryId: "8", page: 2 });
+    await productsApi.get("51");
+    await productsApi.balances("51", "12");
+    await productsApi.create({ sku: "SKU-52" });
+    await productsApi.update("51", { sku: "SKU-51" });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/products?q=SKU&categoryId=8&page=2",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/products/51",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/products/51/balances?warehouseId=12",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      5,
+      "/api/v1/products",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "X-CSRF-Token": csrfToken }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      6,
+      "/api/v1/products/51",
+      expect.objectContaining({ method: "PATCH" }),
     );
   });
 });

@@ -6,6 +6,7 @@ import { CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CaretLeft } from "@phosphor-icons/react/CaretLeft";
 import { Tag } from "@phosphor-icons/react/Tag";
 import { Warehouse } from "@phosphor-icons/react/Warehouse";
+import { Package } from "@phosphor-icons/react/Package";
 import { House } from "@phosphor-icons/react/House";
 import { List } from "@phosphor-icons/react/List";
 import { MagnifyingGlass } from "@phosphor-icons/react/MagnifyingGlass";
@@ -41,6 +42,12 @@ const navigation = [
     path: "/bodegas",
     permission: "warehouses.read",
     icon: Warehouse,
+  },
+  {
+    label: "Productos",
+    path: "/productos",
+    permission: "products.read",
+    icon: Package,
   },
 ];
 const profileDestination = {
