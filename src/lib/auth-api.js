@@ -280,3 +280,9 @@ function createPartnerApi(resource) {
 
 export const customersApi = createPartnerApi("customers");
 export const suppliersApi = createPartnerApi("suppliers");
+
+export const dashboardApi = {
+  get() {
+    return get("/api/v1/dashboard");
+  },
+};

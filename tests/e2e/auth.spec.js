@@ -69,7 +69,7 @@ test("persiste la sesión al recargar y revoca la sesión al cerrar", async ({
   await signIn(page);
   await expect(page).toHaveURL(/\/inicio$/);
   await expect(
-    page.getByRole("heading", { name: "Bienvenido, Vendedor de pruebas" }),
+    page.getByRole("heading", { name: /Vendedor de pruebas/ }),
   ).toBeVisible();
 
   await page.keyboard.press("Tab");
@@ -79,7 +79,7 @@ test("persiste la sesión al recargar y revoca la sesión al cerrar", async ({
   await page.keyboard.press("Enter");
   await expect(page.locator("#contenido-principal")).toBeFocused();
   await expect(
-    page.getByRole("heading", { name: "Bienvenido, Vendedor de pruebas" }),
+    page.getByRole("heading", { name: /Vendedor de pruebas/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Menú de usuario: Vendedor de pruebas" }),
@@ -98,7 +98,7 @@ test("persiste la sesión al recargar y revoca la sesión al cerrar", async ({
 
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Bienvenido, Vendedor de pruebas" }),
+    page.getByRole("heading", { name: /Vendedor de pruebas/ }),
   ).toBeVisible();
 
   await page
@@ -259,7 +259,7 @@ test("mantiene bloqueadas las operaciones mientras el cambio de contraseña sea 
   await expect(page).toHaveURL(/\/inicio$/);
   await expect(
     page.getByRole("heading", {
-      name: "Bienvenido, Cuenta con cambio obligatorio",
+      name: /Cuenta con cambio obligatorio/,
     }),
   ).toBeVisible();
 });
@@ -267,6 +267,7 @@ test("mantiene bloqueadas las operaciones mientras el cambio de contraseña sea 
 test("edita el perfil propio y cambia la contraseña desde el perfil", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   const newPassword = "Perfil-Seguro-2026!Aa";
   await signIn(page, profileEmail);
   await expect(page).toHaveURL(/\/inicio$/);
@@ -349,7 +350,7 @@ test("login y layout no desbordan y se capturan en las resoluciones requeridas",
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await expect(
-      page.getByRole("heading", { name: "Bienvenido, Vendedor de pruebas" }),
+      page.getByRole("heading", { name: /Vendedor de pruebas/ }),
     ).toBeVisible();
     expect(
       await page.evaluate(

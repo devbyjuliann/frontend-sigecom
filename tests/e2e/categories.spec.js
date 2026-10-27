@@ -21,7 +21,10 @@ test("administrator manages categories, searches and filters, and the data persi
 }) => {
   test.setTimeout(90_000);
   await signIn(page);
-  await page.getByRole("link", { name: "Categorías", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Navegación principal" })
+    .getByRole("link", { name: "Categorías", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Categorías", level: 2 }),
   ).toBeVisible();

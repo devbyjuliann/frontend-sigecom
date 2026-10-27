@@ -43,7 +43,10 @@ test("administrator manages products and the interface adapts to required viewpo
   test.setTimeout(120_000);
   await signIn(page);
   const { suffix, category } = await createFixture(page);
-  await page.getByRole("link", { name: "Productos", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Navegación principal" })
+    .getByRole("link", { name: "Productos", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Productos", level: 2 }),
   ).toBeVisible();

@@ -1,43 +1,10 @@
 import { useState } from "react";
 import { LockKey } from "@phosphor-icons/react/LockKey";
-import { ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { SignOut } from "@phosphor-icons/react/SignOut";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/auth-context.jsx";
 import PasswordChangeForm from "../components/password-change-form.jsx";
 import { Button } from "../components/ui/button.jsx";
-
-const roleNames = {
-  administrator: "Administrador",
-  seller: "Vendedor",
-  warehouse: "Bodega",
-  auditor: "Auditor",
-};
-
-export function HomePage() {
-  const { session } = useAuth();
-  const displayName = session.user.displayName || session.user.email;
-  return (
-    <section className="welcome-page" aria-labelledby="welcome-title">
-      <div className="welcome-content">
-        <span className="welcome-icon" aria-hidden="true">
-          <ShieldCheck size={24} weight="duotone" />
-        </span>
-        <p className="welcome-label">Sesión activa</p>
-        <h2 id="welcome-title">Bienvenido, {displayName}</h2>
-        <p className="welcome-description">
-          Tu acceso está habilitado como{" "}
-          <strong>{roleNames[session.user.role] || "Usuario"}</strong>. Los
-          módulos aparecerán aquí cuando estén disponibles para tu perfil.
-        </p>
-        <div className="welcome-divider" />
-        <p className="welcome-note">
-          No hay información comercial para mostrar en esta etapa.
-        </p>
-      </div>
-    </section>
-  );
-}
 
 export function AccessDeniedPage() {
   const { logout, session } = useAuth();

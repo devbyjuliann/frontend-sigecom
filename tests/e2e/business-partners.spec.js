@@ -103,7 +103,10 @@ test("administrator manages customers and suppliers and layouts remain responsiv
   await signIn(page);
   const suffix = Date.now().toString();
 
-  await page.getByRole("link", { name: "Clientes", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Navegación principal" })
+    .getByRole("link", { name: "Clientes", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Clientes", level: 2 }),
   ).toBeVisible();
@@ -173,7 +176,10 @@ test("administrator manages customers and suppliers and layouts remain responsiv
     page.getByRole("row", { name: new RegExp(updatedCustomerName) }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Proveedores", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Navegación principal" })
+    .getByRole("link", { name: "Proveedores", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Proveedores", level: 2 }),
   ).toBeVisible();

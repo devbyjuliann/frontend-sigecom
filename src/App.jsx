@@ -11,11 +11,7 @@ import {
 
 const AppShell = lazy(() => import("./components/app-shell.jsx"));
 const LoginPage = lazy(() => import("./pages/login-page.jsx"));
-const HomePage = lazy(() =>
-  import("./pages/protected-pages.jsx").then((pages) => ({
-    default: pages.HomePage,
-  })),
-);
+const HomePage = lazy(() => import("./pages/dashboard-page.jsx"));
 const AccessDeniedPage = lazy(() =>
   import("./pages/protected-pages.jsx").then((pages) => ({
     default: pages.AccessDeniedPage,

@@ -3,6 +3,7 @@ import {
   authApi,
   categoriesApi,
   customersApi,
+  dashboardApi,
   productsApi,
   suppliersApi,
   warehousesApi,
@@ -400,6 +401,26 @@ describe("authApi", () => {
         method: "PATCH",
         headers: expect.objectContaining({ "X-CSRF-Token": csrfToken }),
       }),
+    );
+  });
+
+  it("fetches dashboard summary without adding query parameters or caching credentials", async () => {
+    const payload = {
+      indicators: {
+        activeProducts: { available: true, value: 0 },
+        customers: { available: false, value: null },
+        suppliers: { available: false, value: null },
+        accessibleWarehouses: { available: true, value: 0 },
+      },
+      productsByCategory: { available: true, items: [] },
+    };
+    const fetch = vi.fn().mockResolvedValue(Response.json(payload));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(dashboardApi.get()).resolves.toEqual(payload);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/dashboard",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
 });

@@ -21,7 +21,10 @@ test("administrator manages warehouses with persisted details and responsive lay
 }) => {
   test.setTimeout(90_000);
   await signIn(page);
-  await page.getByRole("link", { name: "Bodegas", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Navegación principal" })
+    .getByRole("link", { name: "Bodegas", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Bodegas", level: 2 }),
   ).toBeVisible();
