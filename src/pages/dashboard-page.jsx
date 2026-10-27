@@ -5,8 +5,6 @@ import {
   BarChart,
   CartesianGrid,
   LabelList,
-  ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -20,6 +18,11 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth/auth-context.jsx";
 import { dashboardApi } from "../lib/auth-api.js";
 import { Button } from "../components/ui/button.jsx";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "../components/ui/chart.jsx";
 
 const roleNames = {
   administrator: "Administrador",
@@ -93,6 +96,13 @@ const metricDefinitions = [
     icon: Warehouse,
   },
 ];
+
+const categoryChartConfig = {
+  activeProducts: {
+    label: "Productos activos",
+    color: "var(--chart-1)",
+  },
+};
 
 function greetingForNow() {
   const hour = Number(
@@ -175,9 +185,14 @@ function LoadingDashboard({ displayName, roleName }) {
 }
 
 function CategoryChart({ items }) {
-  const total = items.reduce((sum, item) => sum + item.activeProducts, 0);
-  const hasDistribution = items.length > 0 && total > 0;
-  const chartHeight = Math.max(items.length * 38, 210);
+  const sortedItems = [...items].sort(
+    (first, second) =>
+      second.activeProducts - first.activeProducts ||
+      first.categoryName.localeCompare(second.categoryName, "es-CO"),
+  );
+  const total = sortedItems.reduce((sum, item) => sum + item.activeProducts, 0);
+  const hasDistribution = sortedItems.length > 0 && total > 0;
+  const chartHeight = Math.max(sortedItems.length * 48 + 24, 216);
 
   return (
     <section
@@ -189,11 +204,18 @@ function CategoryChart({ items }) {
           <h3 id="category-chart-title">
             Distribución de productos por categoría
           </h3>
-          <p>Productos activos asociados a categorías activas.</p>
+          <p>Productos activos · ordenados de mayor a menor</p>
         </div>
-        <span className="dashboard-panel-icon" aria-hidden="true">
-          <Tag size={18} />
-        </span>
+        {hasDistribution ? (
+          <span className="dashboard-chart-summary">
+            {formatCount(total)} productos activos ·{" "}
+            {formatCount(sortedItems.length)} categorías
+          </span>
+        ) : (
+          <span className="dashboard-panel-icon" aria-hidden="true">
+            <Tag size={18} />
+          </span>
+        )}
       </div>
       {hasDistribution ? (
         <figure
@@ -201,75 +223,79 @@ function CategoryChart({ items }) {
           aria-labelledby="category-chart-title"
         >
           <div className="dashboard-chart-scroll">
-            <div className="dashboard-chart" style={{ height: chartHeight }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={items}
-                  layout="vertical"
-                  margin={{ top: 6, right: 18, bottom: 3, left: 0 }}
-                  accessibilityLayer
-                >
-                  <CartesianGrid horizontal={false} stroke="#e8edf4" />
-                  <XAxis
-                    type="number"
-                    allowDecimals={false}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "#64748b", fontSize: 11 }}
-                    tickFormatter={formatCount}
-                    allowDataOverflow={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="categoryName"
-                    width={126}
-                    interval={0}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "#526078", fontSize: 11 }}
-                    tickFormatter={(value) =>
-                      value.length > 18 ? `${value.slice(0, 17)}…` : value
-                    }
-                  />
-                  <Tooltip
-                    cursor={{ fill: "#f1f5fb" }}
-                    formatter={(value) => [
-                      formatCount(value),
-                      "Productos activos",
-                    ]}
-                    labelFormatter={(label) => label}
-                    contentStyle={{
-                      border: "1px solid #dbe3ef",
-                      borderRadius: 8,
-                      boxShadow: "0 8px 20px rgb(16 40 87 / 10%)",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar
-                    dataKey="activeProducts"
-                    name="Productos activos"
-                    fill="#1f3a8a"
-                    activeBar={{ fill: "#2563eb" }}
-                    radius={[0, 5, 5, 0]}
-                    maxBarSize={22}
-                    isAnimationActive={false}
-                  >
-                    <LabelList
-                      dataKey="activeProducts"
-                      position="right"
-                      formatter={formatCount}
-                      fill="#334155"
-                      fontSize={10}
+            <ChartContainer
+              config={categoryChartConfig}
+              className="dashboard-chart aspect-auto"
+              style={{ height: chartHeight }}
+            >
+              <BarChart
+                data={sortedItems}
+                layout="vertical"
+                margin={{ top: 10, right: 34, bottom: 8, left: -8 }}
+                accessibilityLayer
+              >
+                <CartesianGrid
+                  horizontal={false}
+                  stroke="#e8edf4"
+                  strokeDasharray="3 5"
+                />
+                <XAxis
+                  type="number"
+                  dataKey="activeProducts"
+                  allowDecimals={false}
+                  hide
+                />
+                <YAxis
+                  type="category"
+                  dataKey="categoryName"
+                  width={150}
+                  interval={0}
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={12}
+                  tick={{ fill: "#526078", fontSize: 11 }}
+                  tickFormatter={(value) =>
+                    value.length > 24 ? `${value.slice(0, 23)}…` : value
+                  }
+                />
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      labelFormatter={(label) => label}
+                      formatter={(value) => (
+                        <span className="font-medium tabular-nums text-foreground">
+                          {formatCount(value)} productos
+                        </span>
+                      )}
+                      hideIndicator
                     />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+                  }
+                />
+                <Bar
+                  dataKey="activeProducts"
+                  name="Productos activos"
+                  fill="var(--color-activeProducts)"
+                  radius={[0, 7, 7, 0]}
+                  maxBarSize={24}
+                  isAnimationActive={false}
+                >
+                  <LabelList
+                    dataKey="activeProducts"
+                    position="right"
+                    offset={9}
+                    formatter={formatCount}
+                    className="fill-foreground"
+                    fontSize={11}
+                  />
+                </Bar>
+              </BarChart>
+            </ChartContainer>
           </div>
           <figcaption className="sr-only">
             Distribución real de {formatCount(total)} productos activos en{" "}
             {formatCount(items.length)} categorías.{" "}
-            {items
+            {sortedItems
               .map(
                 (item) =>
                   `${item.categoryName}: ${formatCount(item.activeProducts)} productos.`,
@@ -280,7 +306,7 @@ function CategoryChart({ items }) {
             className="sr-only"
             aria-label="Valores de productos por categoría"
           >
-            {items.map((item) => (
+            {sortedItems.map((item) => (
               <li key={item.categoryId}>
                 {item.categoryName}: {formatCount(item.activeProducts)}{" "}
                 productos.

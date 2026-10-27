@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @theme {
+  --color-background: #ffffff;
+  --color-foreground: #172033;
   --color-brand: #1f3a8a;
   --color-interactive: #2563eb;
   --color-sidebar: #102857;
@@ -8,10 +10,16 @@
   --color-ink: #172033;
   --color-muted: #64748b;
   --color-border: #e2e8f0;
+  --color-muted-foreground: #64748b;
   --shadow-panel: 0 16px 40px rgb(16 40 87 / 8%);
 }
 
 :root {
+  --chart-1: #1f3a8a;
+  --chart-2: #2563eb;
+  --chart-3: #4f6daf;
+  --chart-4: #8296c2;
+  --chart-5: #b7c4dc;
   font-family: "Inter Variable", Inter, "Segoe UI", Arial, sans-serif;
   color: #172033;
   background: #f6f8fc;
@@ -854,6 +862,11 @@ p {
   gap: 14px;
   padding: 20px 20px 14px;
 }
+.dashboard-category-panel .dashboard-panel-heading {
+  align-items: center;
+  padding: 21px 22px 18px;
+  border-bottom: 1px solid #edf1f6;
+}
 .dashboard-panel-heading h3 {
   margin: 0;
   color: #172033;
@@ -873,9 +886,21 @@ p {
   height: 34px;
   border-radius: 9px;
 }
+.dashboard-chart-summary {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid #dce6f5;
+  border-radius: 7px;
+  background: #f5f8fd;
+  color: #334766;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .dashboard-chart-figure {
   margin: 0;
-  padding: 0 12px 14px 8px;
+  padding: 9px 16px 16px 8px;
 }
 .dashboard-chart-scroll {
   width: 100%;
@@ -1044,6 +1069,10 @@ p {
   .dashboard-panel-heading {
     padding: 16px 14px 12px;
   }
+  .dashboard-category-panel .dashboard-panel-heading {
+    align-items: flex-start;
+    padding: 16px 14px 13px;
+  }
   .dashboard-panel-heading h3 {
     font-size: 13px;
   }
@@ -1055,9 +1084,23 @@ p {
     padding-right: 4px;
     padding-left: 0;
   }
+  .dashboard-chart-summary {
+    margin-top: 2px;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
   .dashboard-chart-empty {
     min-height: 190px;
     padding: 18px 14px;
+  }
+}
+@media (max-width: 420px) {
+  .dashboard-category-panel .dashboard-panel-heading {
+    flex-wrap: wrap;
+  }
+  .dashboard-chart-summary {
+    margin-top: 0;
+    margin-left: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {

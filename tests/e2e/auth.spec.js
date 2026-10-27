@@ -149,9 +149,9 @@ test("protege la navegación, limita la búsqueda y permite operar el sidebar co
     name: "Buscar páginas disponibles",
   });
   await search.fill("inventario");
-  await expect(page.getByRole("status")).toHaveText(
-    "No hay páginas disponibles con ese nombre.",
-  );
+  await expect(
+    page.locator("#navigation-search-results").getByRole("status"),
+  ).toHaveText("No hay páginas disponibles con ese nombre.");
   await search.fill("inicio");
   await search.press("Enter");
   await expect(page).toHaveURL(/\/inicio$/);

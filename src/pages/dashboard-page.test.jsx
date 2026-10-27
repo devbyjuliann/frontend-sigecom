@@ -3,6 +3,7 @@ import {
   cleanup,
   render,
   screen,
+  within,
   fireEvent,
   waitFor,
 } from "@testing-library/react";
@@ -28,8 +29,8 @@ const completeDashboard = {
   productsByCategory: {
     available: true,
     items: [
-      { categoryId: "1", categoryName: "Aseo", activeProducts: 7 },
-      { categoryId: "2", categoryName: "Ferretería", activeProducts: 5 },
+      { categoryId: "1", categoryName: "Ferretería", activeProducts: 5 },
+      { categoryId: "2", categoryName: "Aseo", activeProducts: 7 },
     ],
   },
 };
@@ -92,6 +93,18 @@ describe("DashboardPage", () => {
     );
     expect(screen.getByText("Aseo: 7 productos.")).toBeInTheDocument();
     expect(screen.getByText("Ferretería: 5 productos.")).toBeInTheDocument();
+    expect(
+      screen.getByText("12 productos activos · 2 categorías"),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("list", {
+          name: "Valores de productos por categoría",
+        }),
+      )
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Aseo: 7 productos.", "Ferretería: 5 productos."]);
     expect(screen.getByRole("link", { name: "Productos" })).toHaveAttribute(
       "href",
       "/productos",

@@ -7,6 +7,54 @@ const administratorEmail = "frontend-e2e-admin@sigecom.invalid";
 const sellerEmail = "frontend-e2e-category-seller@sigecom.invalid";
 const password = process.env.SIGECOM_E2E_PASSWORD;
 const screenshotDirectory = join(tmpdir(), "opencode", "sigecom-2.5-dashboard");
+const visualDashboardBase = {
+  indicators: {
+    activeProducts: { available: true, value: 0 },
+    customers: { available: true, value: 0 },
+    suppliers: { available: true, value: 0 },
+    accessibleWarehouses: { available: true, value: 0 },
+  },
+};
+const dashboardVisualFixture = {
+  ...visualDashboardBase,
+  indicators: {
+    activeProducts: { available: true, value: 25 },
+    customers: { available: true, value: 8 },
+    suppliers: { available: true, value: 4 },
+    accessibleWarehouses: { available: true, value: 2 },
+  },
+  productsByCategory: {
+    available: true,
+    // Fixture exclusively for browser screenshots; it never touches either database.
+    items: [
+      {
+        categoryId: "fixture-5",
+        categoryName: "Tornillería",
+        activeProducts: 2,
+      },
+      {
+        categoryId: "fixture-3",
+        categoryName: "Seguridad industrial",
+        activeProducts: 4,
+      },
+      {
+        categoryId: "fixture-1",
+        categoryName: "Herramientas eléctricas",
+        activeProducts: 9,
+      },
+      {
+        categoryId: "fixture-4",
+        categoryName: "Accesorios eléctricos",
+        activeProducts: 3,
+      },
+      {
+        categoryId: "fixture-2",
+        categoryName: "Aseo institucional",
+        activeProducts: 7,
+      },
+    ],
+  },
+};
 
 async function signIn(page, email = administratorEmail) {
   await page.goto("/ingresar");
@@ -110,4 +158,113 @@ test("seller dashboard limits shortcuts and indicators to role permissions", asy
   ).toBeVisible();
   await expect(page.getByText("Proveedores registrados")).toHaveCount(0);
   await expect(page.getByText("Bodegas asignadas")).toBeVisible();
+});
+
+test("empty category state remains clear at the required viewports", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/dashboard", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...visualDashboardBase,
+        indicators: {
+          ...visualDashboardBase.indicators,
+          activeProducts: { available: true, value: 0 },
+        },
+        productsByCategory: { available: true, items: [] },
+      }),
+    }),
+  );
+  await signIn(page);
+
+  await expect(
+    page.getByText("No hay productos activos para distribuir por categoría."),
+  ).toBeVisible();
+  await mkdir(screenshotDirectory, { recursive: true });
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1280, height: 720 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(
+        screenshotDirectory,
+        `dashboard-vacio-${viewport.width}x${viewport.height}.png`,
+      ),
+      fullPage: true,
+    });
+  }
+});
+
+test("category chart renders an isolated visual fixture responsively", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/dashboard", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(dashboardVisualFixture),
+    }),
+  );
+  await signIn(page);
+
+  await expect(
+    page.getByText("25 productos activos · 5 categorías"),
+  ).toBeVisible();
+  const categoryValues = page.getByRole("list", {
+    name: "Valores de productos por categoría",
+  });
+  await expect(categoryValues.locator("li").first()).toHaveText(
+    "Herramientas eléctricas: 9 productos.",
+  );
+  await expect(categoryValues.locator("li").last()).toHaveText(
+    "Tornillería: 2 productos.",
+  );
+
+  const chart = page.locator(".recharts-wrapper");
+  await expect(chart).toBeVisible();
+  const chartSvg = chart.locator("svg").first();
+  await expect(chartSvg).toHaveAttribute("tabindex", "0");
+  await chartSvg.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".recharts-tooltip-wrapper")).toContainText(
+    "productos",
+  );
+  await page.locator(".recharts-bar-rectangle").first().hover();
+  await expect(page.locator(".recharts-tooltip-wrapper")).toContainText(
+    "9 productos",
+  );
+  await mkdir(screenshotDirectory, { recursive: true });
+  await page.mouse.move(0, 0);
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1280, height: 720 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: join(
+        screenshotDirectory,
+        `dashboard-fixture-${viewport.width}x${viewport.height}.png`,
+      ),
+      fullPage: true,
+    });
+  }
 });
