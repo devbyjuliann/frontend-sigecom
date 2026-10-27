@@ -286,3 +286,40 @@ export const dashboardApi = {
     return get("/api/v1/dashboard");
   },
 };
+
+function queryString(filters) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== "") {
+      search.set(key, String(value));
+    }
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
+export const inventoryApi = {
+  balances(filters = {}) {
+    return get(`/api/v1/inventory/balances${queryString(filters)}`);
+  },
+  totals(filters = {}) {
+    return get(`/api/v1/inventory/totals${queryString(filters)}`);
+  },
+  movements(filters = {}) {
+    return get(`/api/v1/inventory/movements${queryString(filters)}`);
+  },
+  movement(id) {
+    return get(`/api/v1/inventory/movements/${encodeURIComponent(id)}`);
+  },
+  operations(filters = {}) {
+    return get(`/api/v1/inventory/operations${queryString(filters)}`);
+  },
+  operation(id) {
+    return get(`/api/v1/inventory/operations/${encodeURIComponent(id)}`);
+  },
+  reconciliation(warehouseId) {
+    return get(
+      `/api/v1/inventory/reconciliation${queryString({ warehouseId })}`,
+    );
+  },
+};

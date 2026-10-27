@@ -26,6 +26,7 @@ const ProfilePage = lazy(() => import("./pages/profile-page.jsx"));
 const CategoriesPage = lazy(() => import("./pages/categories-page.jsx"));
 const WarehousesPage = lazy(() => import("./pages/warehouses-page.jsx"));
 const ProductsPage = lazy(() => import("./pages/products-page.jsx"));
+const InventoryPage = lazy(() => import("./pages/inventory-page.jsx"));
 const CustomersPage = lazy(() =>
   import("./pages/business-partners-page.jsx").then((pages) => ({
     default: pages.CustomersPage,
@@ -103,6 +104,17 @@ function AppRoutes() {
           <Route element={<RequirePermission permission="products.read" />}>
             <Route element={<AppShell />}>
               <Route path="/productos" element={<ProductsPage />} />
+            </Route>
+          </Route>
+          <Route
+            element={
+              <RequirePermission
+                permission={["inventory.read", "inventory.movements.read"]}
+              />
+            }
+          >
+            <Route element={<AppShell />}>
+              <Route path="/inventario" element={<InventoryPage />} />
             </Route>
           </Route>
           <Route element={<RequirePermission permission="customers.read" />}>

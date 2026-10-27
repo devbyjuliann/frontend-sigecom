@@ -7,6 +7,7 @@ import { CaretLeft } from "@phosphor-icons/react/CaretLeft";
 import { Tag } from "@phosphor-icons/react/Tag";
 import { Warehouse } from "@phosphor-icons/react/Warehouse";
 import { Package } from "@phosphor-icons/react/Package";
+import { Archive } from "@phosphor-icons/react/Archive";
 import { UsersThree } from "@phosphor-icons/react/UsersThree";
 import { Truck } from "@phosphor-icons/react/Truck";
 import { House } from "@phosphor-icons/react/House";
@@ -50,6 +51,12 @@ const navigation = [
     path: "/productos",
     permission: "products.read",
     icon: Package,
+  },
+  {
+    label: "Inventario",
+    path: "/inventario",
+    permission: ["inventory.read", "inventory.movements.read"],
+    icon: Archive,
   },
   {
     label: "Clientes",
@@ -167,7 +174,9 @@ function SidebarContent({
 }) {
   const { session } = useAuth();
   const destinations = navigation.filter((item) =>
-    session.permissions.includes(item.permission),
+    (Array.isArray(item.permission) ? item.permission : [item.permission]).some(
+      (permission) => session.permissions.includes(permission),
+    ),
   );
   return (
     <>
@@ -315,7 +324,9 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const destinations = navigation.filter((item) =>
-    session.permissions.includes(item.permission),
+    (Array.isArray(item.permission) ? item.permission : [item.permission]).some(
+      (permission) => session.permissions.includes(permission),
+    ),
   );
   const searchableDestinations = [
     ...destinations,
@@ -325,7 +336,11 @@ export default function AppShell() {
   ];
   const pageTitle =
     destinations.find((item) => item.path === location.pathname)?.label ||
-    (location.pathname === "/perfil" ? "Mi perfil" : "SIGECOM");
+    (location.pathname === "/perfil"
+      ? "Mi perfil"
+      : location.pathname === "/inventario"
+        ? "Inventario"
+        : "SIGECOM");
   const sidebarWidth = collapsed ? 76 : 248;
 
   return (

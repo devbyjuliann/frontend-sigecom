@@ -61,7 +61,8 @@ export function RequireAuth() {
 
 export function RequirePermission({ permission }) {
   const { session } = useAuth();
-  if (!session?.permissions?.includes(permission)) {
+  const required = Array.isArray(permission) ? permission : [permission];
+  if (!required.some((code) => session?.permissions?.includes(code))) {
     return <Navigate to="/acceso-denegado" replace />;
   }
   return <Outlet />;

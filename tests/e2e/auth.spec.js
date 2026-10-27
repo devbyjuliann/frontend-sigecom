@@ -150,8 +150,17 @@ test("protege la navegación, limita la búsqueda y permite operar el sidebar co
   });
   await search.fill("inventario");
   await expect(
-    page.locator("#navigation-search-results").getByRole("status"),
-  ).toHaveText("No hay páginas disponibles con ese nombre.");
+    page.locator("#navigation-search-results").getByRole("link", {
+      name: "Inventario",
+    }),
+  ).toBeVisible();
+  await search.press("Enter");
+  await expect(page).toHaveURL(/\/inventario$/);
+  await expect(
+    page.getByRole("heading", { name: "Inventario", level: 2 }),
+  ).toBeVisible();
+  await page.goto("/inicio");
+  await expect(page).toHaveURL(/\/inicio$/);
   await search.fill("inicio");
   await search.press("Enter");
   await expect(page).toHaveURL(/\/inicio$/);
