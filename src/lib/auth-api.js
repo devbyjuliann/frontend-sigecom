@@ -248,3 +248,35 @@ export const productsApi = {
     return patch(`/api/v1/products/${encodeURIComponent(id)}`, input);
   },
 };
+
+function createPartnerApi(resource) {
+  return {
+    list(filters = {}) {
+      const search = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined && value !== null && value !== "") {
+          search.set(key, String(value));
+        }
+      }
+      const query = search.toString();
+      return get(`/api/v1/${resource}${query ? `?${query}` : ""}`);
+    },
+    get(id) {
+      return get(`/api/v1/${resource}/${encodeURIComponent(id)}`);
+    },
+    create(input) {
+      return post(`/api/v1/${resource}`, input);
+    },
+    update(id, input) {
+      return patch(`/api/v1/${resource}/${encodeURIComponent(id)}`, input);
+    },
+    setStatus(id, isActive) {
+      return patch(`/api/v1/${resource}/${encodeURIComponent(id)}/status`, {
+        isActive,
+      });
+    },
+  };
+}
+
+export const customersApi = createPartnerApi("customers");
+export const suppliersApi = createPartnerApi("suppliers");

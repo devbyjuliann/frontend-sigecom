@@ -1962,3 +1962,122 @@ p {
     flex: 1 1 auto;
   }
 }
+
+.module-dialog--partner {
+  width: min(660px, calc(100vw - 32px));
+  max-height: min(90dvh, 820px);
+  overflow-y: auto;
+}
+.partner-form {
+  gap: 16px;
+}
+.partner-form-section {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.partner-form-section legend {
+  width: 100%;
+  margin-bottom: 11px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid #edf1f6;
+  color: #1f3a8a;
+  font-size: 12px;
+  font-weight: 650;
+}
+.partner-form-section legend span,
+.partner-form .form-field label span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 450;
+}
+.partner-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 15px;
+}
+.partner-form-grid__wide {
+  grid-column: 1 / -1;
+}
+.partner-form .field-hint {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.partner-identification {
+  color: #526078;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.partner-empty-icon,
+.partner-detail-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #dce7f8;
+  border-radius: 11px;
+  background: #f1f5fb;
+  color: #1f3a8a;
+}
+.partner-detail-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0 12px;
+  border-bottom: 1px solid #edf1f6;
+}
+.partner-detail-heading > div {
+  min-width: 0;
+  flex: 1;
+}
+.partner-detail-heading h3 {
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: #172033;
+  font-size: 15px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+.partner-contact-name {
+  display: flex;
+  gap: 9px;
+  margin: 12px 0 0;
+  color: #172033;
+  font-size: 12px;
+}
+.partner-contact-name span {
+  color: #64748b;
+}
+.partner-details {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.partner-details > div {
+  grid-template-columns: minmax(84px, 0.35fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 0;
+}
+.partner-detail-updated {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .partner-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .partner-form-grid__wide {
+    grid-column: auto;
+  }
+  .partner-detail-heading {
+    flex-wrap: wrap;
+  }
+  .partner-detail-heading > .status-badge {
+    margin-left: 54px;
+  }
+}

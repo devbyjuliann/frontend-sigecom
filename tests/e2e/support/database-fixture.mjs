@@ -29,6 +29,12 @@ export const testAccounts = [
     passwordChangeRequired: false,
   },
   {
+    email: "frontend-e2e-auditor@sigecom.invalid",
+    name: "Auditor de pruebas",
+    role: "auditor",
+    passwordChangeRequired: false,
+  },
+  {
     email: "frontend-e2e@sigecom.invalid",
     name: "Vendedor de pruebas",
     role: "seller",

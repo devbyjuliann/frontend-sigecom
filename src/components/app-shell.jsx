@@ -7,6 +7,8 @@ import { CaretLeft } from "@phosphor-icons/react/CaretLeft";
 import { Tag } from "@phosphor-icons/react/Tag";
 import { Warehouse } from "@phosphor-icons/react/Warehouse";
 import { Package } from "@phosphor-icons/react/Package";
+import { UsersThree } from "@phosphor-icons/react/UsersThree";
+import { Truck } from "@phosphor-icons/react/Truck";
 import { House } from "@phosphor-icons/react/House";
 import { List } from "@phosphor-icons/react/List";
 import { MagnifyingGlass } from "@phosphor-icons/react/MagnifyingGlass";
@@ -48,6 +50,18 @@ const navigation = [
     path: "/productos",
     permission: "products.read",
     icon: Package,
+  },
+  {
+    label: "Clientes",
+    path: "/clientes",
+    permission: "customers.read",
+    icon: UsersThree,
+  },
+  {
+    label: "Proveedores",
+    path: "/proveedores",
+    permission: "suppliers.read",
+    icon: Truck,
   },
 ];
 const profileDestination = {

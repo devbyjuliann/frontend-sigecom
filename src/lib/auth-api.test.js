@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   authApi,
   categoriesApi,
+  customersApi,
   productsApi,
+  suppliersApi,
   warehousesApi,
 } from "./auth-api.js";
 
@@ -342,6 +344,62 @@ describe("authApi", () => {
       6,
       "/api/v1/products/51",
       expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("uses authenticated customer and supplier routes for CRUD and status", async () => {
+    const csrfToken = "c".repeat(64);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken }))
+      .mockResolvedValueOnce(Response.json({ items: [], pagination: {} }))
+      .mockResolvedValueOnce(Response.json({ id: "1" }))
+      .mockResolvedValueOnce(Response.json({ id: "1" }))
+      .mockResolvedValueOnce(Response.json({ id: "2" }))
+      .mockResolvedValueOnce(Response.json({ id: "2" }))
+      .mockResolvedValueOnce(Response.json({ id: "2" }));
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await customersApi.list({ q: "123", status: "active", page: 2 });
+    await customersApi.get("1");
+    await customersApi.update("1", { name: "Cliente" });
+    await suppliersApi.create({ businessName: "Proveedor" });
+    await suppliersApi.update("2", { businessName: "Proveedor actualizado" });
+    await suppliersApi.setStatus("2", false);
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/customers?q=123&status=active&page=2",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/customers/1",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/customers/1",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      5,
+      "/api/v1/suppliers",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      6,
+      "/api/v1/suppliers/2",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      7,
+      "/api/v1/suppliers/2/status",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({ "X-CSRF-Token": csrfToken }),
+      }),
     );
   });
 });

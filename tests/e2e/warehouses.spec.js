@@ -40,6 +40,11 @@ test("administrator manages warehouses with persisted details and responsive lay
     .getByRole("button", { name: "Crear bodega" })
     .click();
 
+  // The test database is intentionally persistent; locate this run's record
+  // instead of assuming it fits on the first page after previous E2E runs.
+  await page.getByRole("searchbox", { name: "Buscar bodegas" }).fill(suffix);
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+
   await expect(
     page.getByRole("row", { name: new RegExp(`${code} ${originalName}`) }),
   ).toBeVisible();

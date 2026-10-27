@@ -30,6 +30,16 @@ const ProfilePage = lazy(() => import("./pages/profile-page.jsx"));
 const CategoriesPage = lazy(() => import("./pages/categories-page.jsx"));
 const WarehousesPage = lazy(() => import("./pages/warehouses-page.jsx"));
 const ProductsPage = lazy(() => import("./pages/products-page.jsx"));
+const CustomersPage = lazy(() =>
+  import("./pages/business-partners-page.jsx").then((pages) => ({
+    default: pages.CustomersPage,
+  })),
+);
+const SuppliersPage = lazy(() =>
+  import("./pages/business-partners-page.jsx").then((pages) => ({
+    default: pages.SuppliersPage,
+  })),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -97,6 +107,16 @@ function AppRoutes() {
           <Route element={<RequirePermission permission="products.read" />}>
             <Route element={<AppShell />}>
               <Route path="/productos" element={<ProductsPage />} />
+            </Route>
+          </Route>
+          <Route element={<RequirePermission permission="customers.read" />}>
+            <Route element={<AppShell />}>
+              <Route path="/clientes" element={<CustomersPage />} />
+            </Route>
+          </Route>
+          <Route element={<RequirePermission permission="suppliers.read" />}>
+            <Route element={<AppShell />}>
+              <Route path="/proveedores" element={<SuppliersPage />} />
             </Route>
           </Route>
           <Route path="/" element={<Navigate to="/inicio" replace />} />
