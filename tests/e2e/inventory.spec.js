@@ -55,4 +55,27 @@ test("administrator consults inventory and the responsive layout at four viewpor
       fullPage: true,
     });
   }
+
+  const balancesTab = page.getByRole("tab", { name: "Por bodega" });
+  await balancesTab.focus();
+  await page.keyboard.press("End");
+  const movementsTab = page.getByRole("tab", { name: /Movimientos/ });
+  await expect(movementsTab).toBeFocused();
+  await expect(movementsTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel")).toHaveAttribute(
+    "aria-labelledby",
+    "inventory-tab-movements",
+  );
+  await expect(page.getByText("Cargando inventario…")).toBeHidden();
+  const movementScroll = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  expect(movementScroll.document).toBeLessThanOrEqual(
+    movementScroll.viewport + 1,
+  );
+  await page.screenshot({
+    path: join(screenshotDirectory, "mobile-movements.png"),
+    fullPage: true,
+  });
 });

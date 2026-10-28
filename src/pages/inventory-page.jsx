@@ -12,6 +12,30 @@ import { inventoryApi, ApiError, warehousesApi } from "../lib/auth-api.js";
 
 const column = createColumnHelper();
 const pageSizes = [10, 25, 50];
+const operationLabels = {
+  initial_stock: "Apertura de inventario",
+  adjustment_in: "Ajuste de entrada",
+  adjustment_out: "Ajuste de salida",
+  transfer: "Traslado",
+  purchase_receipt: "Recepción de compra",
+  sale_issue: "Salida por venta",
+  sale_reversal: "Anulación de venta",
+  customer_return: "Devolución de cliente",
+  supplier_return: "Devolución a proveedor",
+};
+
+function formatInventoryDate(value) {
+  if (!value) return "—";
+  const source = value instanceof Date ? value.toISOString() : value;
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(source);
+  const date = new Date(hasTimezone ? source : `${source.replace(" ", "T")}Z`);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Bogota",
+  }).format(date);
+}
 
 function StateMessage({ children, tone = "neutral" }) {
   return (
@@ -47,8 +71,8 @@ export default function InventoryPage() {
     queryFn: () =>
       warehousesApi.list({ page: 1, pageSize: 100, status: "all" }),
     enabled:
-      canRead ||
-      (canReadMovements && session.permissions.includes("warehouses.read")),
+      (canRead || canReadMovements) &&
+      session.permissions.includes("warehouses.read"),
     retry: false,
   });
   const balancesQuery = useQuery({
@@ -130,11 +154,18 @@ export default function InventoryPage() {
   );
   const movementColumns = useMemo(
     () => [
-      column.accessor("createdAt", { header: "Fecha" }),
+      column.accessor("createdAt", {
+        header: "Fecha",
+        cell: ({ getValue }) => formatInventoryDate(getValue()),
+      }),
       column.accessor("sku", { header: "SKU" }),
       column.accessor("productName", { header: "Producto" }),
       column.accessor("warehouseName", { header: "Bodega" }),
-      column.accessor("operationType", { header: "Operación" }),
+      column.accessor("operationType", {
+        header: "Operación",
+        cell: ({ getValue }) =>
+          operationLabels[getValue()] || "Operación de inventario",
+      }),
       column.accessor("direction", {
         header: "Tipo",
         cell: ({ getValue }) => (getValue() === "IN" ? "Entrada" : "Salida"),
@@ -198,12 +229,33 @@ export default function InventoryPage() {
         className="inventory-tabs"
         role="tablist"
         aria-label="Vistas de inventario"
+        onKeyDown={(event) => {
+          const tabs = [
+            ...event.currentTarget.querySelectorAll('[role="tab"]'),
+          ];
+          const currentIndex = tabs.indexOf(document.activeElement);
+          let nextIndex;
+          if (event.key === "ArrowRight")
+            nextIndex = (currentIndex + 1) % tabs.length;
+          else if (event.key === "ArrowLeft")
+            nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+          else if (event.key === "Home") nextIndex = 0;
+          else if (event.key === "End") nextIndex = tabs.length - 1;
+          if (nextIndex !== undefined) {
+            event.preventDefault();
+            tabs[nextIndex].focus();
+            tabs[nextIndex].click();
+          }
+        }}
       >
         {canRead ? (
           <button
             type="button"
             role="tab"
+            id="inventory-tab-balances"
+            aria-controls="inventory-tabpanel"
             aria-selected={view === "balances"}
+            tabIndex={view === "balances" ? 0 : -1}
             className={
               view === "balances" ? "inventory-tab is-active" : "inventory-tab"
             }
@@ -216,7 +268,10 @@ export default function InventoryPage() {
           <button
             type="button"
             role="tab"
+            id="inventory-tab-totals"
+            aria-controls="inventory-tabpanel"
             aria-selected={view === "totals"}
+            tabIndex={view === "totals" ? 0 : -1}
             className={
               view === "totals" ? "inventory-tab is-active" : "inventory-tab"
             }
@@ -229,7 +284,10 @@ export default function InventoryPage() {
           <button
             type="button"
             role="tab"
+            id="inventory-tab-movements"
+            aria-controls="inventory-tabpanel"
             aria-selected={view === "movements"}
+            tabIndex={view === "movements" ? 0 : -1}
             className={
               view === "movements" ? "inventory-tab is-active" : "inventory-tab"
             }
@@ -240,7 +298,13 @@ export default function InventoryPage() {
         ) : null}
       </div>
 
-      <div className="inventory-panel">
+      <div
+        className="inventory-panel"
+        id="inventory-tabpanel"
+        role="tabpanel"
+        aria-labelledby={`inventory-tab-${view}`}
+        tabIndex={0}
+      >
         <div className="inventory-toolbar">
           <form className="inventory-search" onSubmit={submitSearch}>
             <label className="sr-only" htmlFor="inventory-search">
@@ -262,24 +326,34 @@ export default function InventoryPage() {
             </Button>
           </form>
           <div className="inventory-filters">
-            <label className="inventory-filter">
-              Bodega
-              <select
-                value={warehouseId}
-                onChange={(event) => {
-                  setWarehouseId(event.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">Todas las asignadas</option>
-                {(warehousesQuery.data?.items || []).map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name}
-                    {warehouse.isActive ? "" : " (inactiva)"}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {canRead && !session.permissions.includes("warehouses.read") ? (
+              <span className="inventory-filter-note">
+                Solo se muestran existencias de tus bodegas autorizadas.
+              </span>
+            ) : null}
+            {(canRead && session.permissions.includes("warehouses.read")) ||
+            (!canRead &&
+              canReadMovements &&
+              session.permissions.includes("warehouses.read")) ? (
+              <label className="inventory-filter">
+                Bodega
+                <select
+                  value={warehouseId}
+                  onChange={(event) => {
+                    setWarehouseId(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Todas las asignadas</option>
+                  {(warehousesQuery.data?.items || []).map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                      {warehouse.isActive ? "" : " (inactiva)"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             {view !== "movements" ? (
               <label className="inventory-filter">
                 Estado del saldo
@@ -341,6 +415,14 @@ export default function InventoryPage() {
             }
           />
         )}
+
+        {warehousesQuery.isError &&
+        (canRead || canReadMovements) &&
+        session.permissions.includes("warehouses.read") ? (
+          <StateMessage tone="warning">
+            No fue posible cargar las bodegas autorizadas para el filtro.
+          </StateMessage>
+        ) : null}
 
         <div className="inventory-pagination">
           <label>

@@ -1675,6 +1675,11 @@ p {
 .inventory-tab.is-active {
   border-bottom-color: #2563eb;
 }
+.inventory-tab:focus-visible,
+.inventory-panel:focus-visible {
+  outline: 3px solid rgb(37 99 235 / 35%);
+  outline-offset: 2px;
+}
 .inventory-panel {
   min-width: 0;
   overflow: hidden;
@@ -1720,6 +1725,12 @@ p {
   gap: 14px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+.inventory-filter-note {
+  max-width: 280px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
 }
 .inventory-filter select {
   max-width: min(240px, 38vw);
@@ -1793,15 +1804,29 @@ p {
     width: 100%;
   }
   .inventory-filter {
+    width: 100%;
     justify-content: space-between;
   }
   .inventory-filter select {
-    max-width: 62%;
+    width: min(62%, 240px);
+    min-width: 0;
+    max-width: none;
+    flex: 0 1 62%;
+  }
+  .inventory-tabs {
+    gap: 2px;
+  }
+  .inventory-tab {
+    padding: 0 8px;
+    font-size: 12px;
   }
   .inventory-filters {
     align-items: stretch;
     flex-direction: column;
     gap: 10px;
+  }
+  .inventory-filter-note {
+    max-width: none;
   }
   .inventory-pagination {
     align-items: flex-start;

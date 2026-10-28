@@ -125,4 +125,76 @@ describe("InventoryPage", () => {
     expect(inventoryApi.balances).not.toHaveBeenCalled();
     expect(warehousesApi.list).not.toHaveBeenCalled();
   });
+
+  it("keeps authorized balances available without warehouse administration permission", async () => {
+    renderPage(["inventory.read"]);
+    expect(
+      await screen.findByRole("row", { name: /CAF-001.*Café molido/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/tus bodegas autorizadas/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Bodega")).not.toBeInTheDocument();
+    expect(warehousesApi.list).not.toHaveBeenCalled();
+  });
+
+  it("labels inactive warehouses in the authorized selector", async () => {
+    warehousesApi.list.mockResolvedValue({
+      items: [{ id: "9", name: "Bodega cerrada", isActive: false }],
+    });
+    renderPage(["inventory.read", "warehouses.read"]);
+    expect(
+      await screen.findByRole("option", { name: "Bodega cerrada (inactiva)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows actionable errors when inventory or warehouse filters fail to load", async () => {
+    inventoryApi.balances.mockRejectedValue(new Error("network error"));
+    warehousesApi.list.mockRejectedValue(new Error("network error"));
+    renderPage(["inventory.read", "warehouses.read"]);
+    expect(
+      await screen.findByText(
+        "No fue posible cargar la información. Intenta nuevamente.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "No fue posible cargar las bodegas autorizadas para el filtro.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("uses accessible tab keyboard navigation and localized movement labels", async () => {
+    inventoryApi.movements.mockResolvedValue({
+      items: [
+        {
+          id: "1",
+          createdAt: "2026-10-28 15:30:00",
+          sku: "CAF-001",
+          productName: "Café molido",
+          warehouseName: "Bodega Centro",
+          operationType: "initial_stock",
+          direction: "IN",
+          quantity: 2,
+          unit: "unidad",
+          responsibleName: "Usuario de prueba",
+        },
+      ],
+      pagination: { page: 1, pageSize: 10, total: 1, pageCount: 1 },
+    });
+    renderPage();
+    const tab = screen.getByRole("tab", { name: /por bodega/i });
+    tab.focus();
+    fireEvent.keyDown(tab, { key: "End" });
+    const movementTab = screen.getByRole("tab", { name: /movimientos/i });
+    expect(movementTab).toHaveFocus();
+    expect(movementTab).toHaveAttribute("aria-selected", "true");
+    expect(movementTab).toHaveAttribute("aria-controls", "inventory-tabpanel");
+    expect(
+      await screen.findByText("Apertura de inventario"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tabpanel")).toHaveAttribute(
+      "aria-labelledby",
+      "inventory-tab-movements",
+    );
+    expect(screen.getByText(/28\/10\/26, 10:30 a\. m\./)).toBeInTheDocument();
+  });
 });
