@@ -5,6 +5,7 @@ process.env.SIGECOM_E2E_FRONTEND_PORT = "5174";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  outputDir: process.env.SIGECOM_E2E_OUTPUT_DIR || "./test-results",
   globalSetup: "./tests/e2e/global-setup.mjs",
   globalTeardown: "./tests/e2e/global-teardown.mjs",
   fullyParallel: false,
