@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -20,6 +21,8 @@ export default function DataTable({
   emptyState,
   emptyLabel = "No hay registros para mostrar.",
   regionLabel = "Tabla de datos",
+  expandedRowIds,
+  renderExpandedRow,
 }) {
   // TanStack Table returns a mutable table controller by design; keep it out of React Compiler memoization.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -97,16 +100,25 @@ export default function DataTable({
             </thead>
             <tbody>
               {table.getRowModel().rows.map((row) => (
-                <tr key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </td>
-                  ))}
-                </tr>
+                <Fragment key={row.id}>
+                  <tr>
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                  {renderExpandedRow && expandedRowIds?.has(row.original.id) ? (
+                    <tr className="data-table-expanded-row">
+                      <td colSpan={row.getVisibleCells().length}>
+                        {renderExpandedRow(row.original)}
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>

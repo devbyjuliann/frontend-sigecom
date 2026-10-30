@@ -52,7 +52,7 @@ async function getCsrfToken() {
   return csrfToken;
 }
 
-async function post(path, body) {
+async function post(path, body, { idempotencyKey } = {}) {
   const token = csrfToken || (await getCsrfToken());
   let response;
 
@@ -64,6 +64,7 @@ async function post(path, body) {
         Accept: "application/json",
         "Content-Type": "application/json",
         "X-CSRF-Token": token,
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -280,6 +281,54 @@ function createPartnerApi(resource) {
 
 export const customersApi = createPartnerApi("customers");
 export const suppliersApi = createPartnerApi("suppliers");
+
+export const purchasesApi = {
+  list(filters = {}) {
+    return get(`/api/v1/purchase-orders${queryString(filters)}`);
+  },
+  get(id) {
+    return get(`/api/v1/purchase-orders/${encodeURIComponent(id)}`);
+  },
+  create(input) {
+    return post("/api/v1/purchase-orders", input);
+  },
+  update(id, input) {
+    return patch(`/api/v1/purchase-orders/${encodeURIComponent(id)}`, input);
+  },
+  confirm(id, input) {
+    return post(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/confirmation`,
+      input,
+    );
+  },
+  cancel(id, input) {
+    return post(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/cancellation`,
+      input,
+    );
+  },
+  updateCommercialCode(id, input) {
+    return patch(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/commercial-code`,
+      input,
+    );
+  },
+  receipts(id) {
+    return get(`/api/v1/purchase-orders/${encodeURIComponent(id)}/receipts`);
+  },
+  receipt(id, receiptId) {
+    return get(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/receipts/${encodeURIComponent(receiptId)}`,
+    );
+  },
+  receive(id, input, idempotencyKey) {
+    return post(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/receipts`,
+      input,
+      { idempotencyKey },
+    );
+  },
+};
 
 export const dashboardApi = {
   get() {

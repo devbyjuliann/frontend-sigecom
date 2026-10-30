@@ -10,6 +10,7 @@ import { Package } from "@phosphor-icons/react/Package";
 import { Archive } from "@phosphor-icons/react/Archive";
 import { UsersThree } from "@phosphor-icons/react/UsersThree";
 import { Truck } from "@phosphor-icons/react/Truck";
+import { ClipboardText } from "@phosphor-icons/react/ClipboardText";
 import { House } from "@phosphor-icons/react/House";
 import { List } from "@phosphor-icons/react/List";
 import { MagnifyingGlass } from "@phosphor-icons/react/MagnifyingGlass";
@@ -69,6 +70,12 @@ const navigation = [
     path: "/proveedores",
     permission: "suppliers.read",
     icon: Truck,
+  },
+  {
+    label: "Compras",
+    path: "/compras",
+    permission: "purchases.read",
+    icon: ClipboardText,
   },
 ];
 const profileDestination = {
@@ -336,11 +343,13 @@ export default function AppShell() {
   ];
   const pageTitle =
     destinations.find((item) => item.path === location.pathname)?.label ||
-    (location.pathname === "/perfil"
-      ? "Mi perfil"
-      : location.pathname === "/inventario"
-        ? "Inventario"
-        : "SIGECOM");
+    (location.pathname.startsWith("/compras")
+      ? "Compras"
+      : location.pathname === "/perfil"
+        ? "Mi perfil"
+        : location.pathname === "/inventario"
+          ? "Inventario"
+          : "SIGECOM");
   const sidebarWidth = collapsed ? 76 : 248;
 
   return (

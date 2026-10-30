@@ -8,7 +8,12 @@ import DataTable from "../components/data-table.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { useAuth } from "../auth/auth-context.jsx";
-import { inventoryApi, ApiError, warehousesApi } from "../lib/auth-api.js";
+import {
+  ApiError,
+  categoriesApi,
+  inventoryApi,
+  warehousesApi,
+} from "../lib/auth-api.js";
 
 const column = createColumnHelper();
 const pageSizes = [10, 25, 50];
@@ -23,6 +28,63 @@ const operationLabels = {
   customer_return: "Devolución de cliente",
   supplier_return: "Devolución a proveedor",
 };
+const quantityFormatter = new Intl.NumberFormat("es-CO", {
+  maximumFractionDigits: 0,
+});
+const operationTypes = Object.entries(operationLabels);
+
+function formatQuantity(value) {
+  return quantityFormatter.format(Number(value) || 0);
+}
+
+function ProductStatusBadge({ isActive }) {
+  return (
+    <span
+      className={`status-badge${isActive ? "" : " status-badge--inactive"}`}
+    >
+      <span aria-hidden="true" />
+      {isActive ? "Activo" : "Inactivo"}
+    </span>
+  );
+}
+
+function StockStatusBadge({ item }) {
+  if (!item.hasBalance) {
+    return (
+      <span className="status-badge status-badge--muted">
+        Sin saldo registrado
+      </span>
+    );
+  }
+  if (Number(item.quantity) === 0) {
+    return <span className="status-badge status-badge--danger">Agotado</span>;
+  }
+  if (item.isLowStock) {
+    return (
+      <span className="status-badge status-badge--warning">Stock bajo</span>
+    );
+  }
+  return <span className="status-badge">Disponible</span>;
+}
+
+function TotalStockStatusBadge({ item }) {
+  if (!item.hasRegisteredBalances) {
+    return (
+      <span className="status-badge status-badge--muted">
+        Sin saldos registrados
+      </span>
+    );
+  }
+  if (Number(item.totalQuantity) === 0) {
+    return <span className="status-badge status-badge--danger">Agotado</span>;
+  }
+  if (Number(item.lowStockWarehouseCount) > 0) {
+    return (
+      <span className="status-badge status-badge--warning">Stock bajo</span>
+    );
+  }
+  return <span className="status-badge">Disponible</span>;
+}
 
 function formatInventoryDate(value) {
   if (!value) return "—";
@@ -57,14 +119,48 @@ export default function InventoryPage() {
   const [view, setView] = useState(canRead ? "balances" : "movements");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [productStatus, setProductStatus] = useState("active");
   const [stockStatus, setStockStatus] = useState("all");
   const [warehouseId, setWarehouseId] = useState("");
+  const [operationType, setOperationType] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const filters = useMemo(
-    () => ({ page, pageSize, q: search, stockStatus, warehouseId }),
-    [page, pageSize, search, stockStatus, warehouseId],
+    () => ({
+      page,
+      pageSize,
+      q: search,
+      categoryId,
+      productStatus,
+      warehouseStatus: "all",
+      stockStatus,
+      warehouseId,
+    }),
+    [
+      page,
+      pageSize,
+      search,
+      categoryId,
+      productStatus,
+      stockStatus,
+      warehouseId,
+    ],
+  );
+  const movementFilters = useMemo(
+    () => ({
+      page,
+      pageSize,
+      q: search,
+      warehouseId,
+      operationType,
+      dateFrom,
+      dateTo,
+    }),
+    [page, pageSize, search, warehouseId, operationType, dateFrom, dateTo],
   );
   const warehousesQuery = useQuery({
     queryKey: ["inventory", "warehouse-filters"],
@@ -73,6 +169,13 @@ export default function InventoryPage() {
     enabled:
       (canRead || canReadMovements) &&
       session.permissions.includes("warehouses.read"),
+    retry: false,
+  });
+  const categoriesQuery = useQuery({
+    queryKey: ["inventory", "category-filters"],
+    queryFn: () =>
+      categoriesApi.list({ page: 1, pageSize: 100, status: "all" }),
+    enabled: canRead && session.permissions.includes("categories.read"),
     retry: false,
   });
   const balancesQuery = useQuery({
@@ -93,9 +196,8 @@ export default function InventoryPage() {
     retry: false,
   });
   const movementsQuery = useQuery({
-    queryKey: ["inventory", "movements", page, pageSize, search, warehouseId],
-    queryFn: () =>
-      inventoryApi.movements({ page, pageSize, q: search, warehouseId }),
+    queryKey: ["inventory", "movements", movementFilters],
+    queryFn: () => inventoryApi.movements(movementFilters),
     enabled: canReadMovements && view === "movements",
     retry: false,
   });
@@ -109,25 +211,24 @@ export default function InventoryPage() {
         header: "Existencia",
         cell: ({ row }) =>
           row.original.hasBalance
-            ? `${row.original.quantity} ${row.original.unit}`
+            ? `${formatQuantity(row.original.quantity)} ${row.original.unit}`
             : "Sin saldo registrado",
       }),
-      column.accessor("minimumStock", { header: "Mínimo por bodega" }),
       column.display({
-        id: "status",
-        header: "Estado",
-        cell: ({ row }) =>
-          row.original.isLowStock ? (
-            <span className="status-badge status-badge--warning">
-              Stock bajo
-            </span>
-          ) : row.original.hasBalance ? (
-            <span className="status-badge">Registrado</span>
-          ) : (
-            <span className="status-badge status-badge--muted">
-              No registrado
-            </span>
-          ),
+        id: "productStatus",
+        header: "Estado del producto",
+        cell: ({ row }) => (
+          <ProductStatusBadge isActive={row.original.productIsActive} />
+        ),
+      }),
+      column.accessor("minimumStock", {
+        header: "Mínimo por bodega",
+        cell: ({ getValue }) => formatQuantity(getValue()),
+      }),
+      column.display({
+        id: "stockStatus",
+        header: "Estado de existencias",
+        cell: ({ row }) => <StockStatusBadge item={row.original} />,
       }),
     ],
     [],
@@ -136,6 +237,18 @@ export default function InventoryPage() {
     () => [
       column.accessor("sku", { header: "SKU" }),
       column.accessor("productName", { header: "Producto" }),
+      column.display({
+        id: "productStatus",
+        header: "Estado del producto",
+        cell: ({ row }) => (
+          <ProductStatusBadge isActive={row.original.productIsActive} />
+        ),
+      }),
+      column.display({
+        id: "stockStatus",
+        header: "Estado de existencias",
+        cell: ({ row }) => <TotalStockStatusBadge item={row.original} />,
+      }),
       column.accessor("authorizedWarehouseCount", {
         header: "Bodegas autorizadas",
       }),
@@ -144,11 +257,13 @@ export default function InventoryPage() {
       }),
       column.accessor("totalQuantity", {
         header: "Total autorizado",
-        cell: ({ row }) => `${row.original.totalQuantity} ${row.original.unit}`,
+        cell: ({ row }) =>
+          `${formatQuantity(row.original.totalQuantity)} ${row.original.unit}`,
       }),
       column.accessor("lowStockWarehouseCount", {
         header: "Bodegas con alerta",
       }),
+      column.accessor("zeroBalanceCount", { header: "Bodegas en cero" }),
     ],
     [],
   );
@@ -172,7 +287,8 @@ export default function InventoryPage() {
       }),
       column.accessor("quantity", {
         header: "Cantidad",
-        cell: ({ row }) => `${row.original.quantity} ${row.original.unit}`,
+        cell: ({ row }) =>
+          `${formatQuantity(row.original.quantity)} ${row.original.unit}`,
       }),
       column.accessor("responsibleName", { header: "Responsable" }),
     ],
@@ -198,6 +314,13 @@ export default function InventoryPage() {
   function changeView(next) {
     setView(next);
     setPage(1);
+  }
+
+  function changeFilter(setter) {
+    return (event) => {
+      setter(event.target.value);
+      setPage(1);
+    };
   }
 
   if (!canRead && !canReadMovements) {
@@ -318,7 +441,7 @@ export default function InventoryPage() {
               placeholder={
                 view === "movements"
                   ? "Producto, referencia o motivo"
-                  : "SKU o nombre del producto"
+                  : "Buscar por SKU o nombre"
               }
             />
             <Button type="submit" size="sm">
@@ -331,18 +454,13 @@ export default function InventoryPage() {
                 Solo se muestran existencias de tus bodegas autorizadas.
               </span>
             ) : null}
-            {(canRead && session.permissions.includes("warehouses.read")) ||
-            (!canRead &&
-              canReadMovements &&
-              session.permissions.includes("warehouses.read")) ? (
+            {(canRead || canReadMovements) &&
+            session.permissions.includes("warehouses.read") ? (
               <label className="inventory-filter">
                 Bodega
                 <select
                   value={warehouseId}
-                  onChange={(event) => {
-                    setWarehouseId(event.target.value);
-                    setPage(1);
-                  }}
+                  onChange={changeFilter(setWarehouseId)}
                 >
                   <option value="">Todas las asignadas</option>
                   {(warehousesQuery.data?.items || []).map((warehouse) => (
@@ -354,25 +472,103 @@ export default function InventoryPage() {
                 </select>
               </label>
             ) : null}
-            {view !== "movements" ? (
-              <label className="inventory-filter">
-                Estado del saldo
-                <select
-                  value={stockStatus}
-                  onChange={(event) => {
-                    setStockStatus(event.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="all">Todos</option>
-                  <option value="low">Stock bajo</option>
-                  <option value="zero">Saldo en cero</option>
-                  <option value="unregistered">Sin registrar</option>
-                </select>
-              </label>
+            {view !== "movements" && canRead ? (
+              <>
+                {session.permissions.includes("categories.read") ? (
+                  <label className="inventory-filter">
+                    Categoría
+                    <select
+                      value={categoryId}
+                      onChange={changeFilter(setCategoryId)}
+                    >
+                      <option value="">Todas las categorías</option>
+                      {(categoriesQuery.data?.items || []).map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                          {category.isActive ? "" : " (inactiva)"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <label className="inventory-filter">
+                  Estado del producto
+                  <select
+                    value={productStatus}
+                    onChange={changeFilter(setProductStatus)}
+                  >
+                    <option value="all">Activos e inactivos</option>
+                    <option value="active">Activos</option>
+                    <option value="inactive">Inactivos</option>
+                  </select>
+                </label>
+                <label className="inventory-filter">
+                  Estado de existencias
+                  <select
+                    value={stockStatus}
+                    onChange={changeFilter(setStockStatus)}
+                  >
+                    <option value="all">Todos los estados</option>
+                    <option value="low">Bajo el mínimo (incluye cero)</option>
+                    <option value="zero">Saldo registrado en cero</option>
+                    <option value="unregistered">Sin saldo registrado</option>
+                  </select>
+                </label>
+              </>
+            ) : null}
+            {view === "movements" ? (
+              <>
+                <label className="inventory-filter">
+                  Tipo de movimiento
+                  <select
+                    value={operationType}
+                    onChange={changeFilter(setOperationType)}
+                  >
+                    <option value="">Todos los tipos</option>
+                    {operationTypes.map(([type, label]) => (
+                      <option key={type} value={type}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="inventory-filter">
+                  Fecha desde
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    max={dateTo || undefined}
+                    onChange={changeFilter(setDateFrom)}
+                  />
+                </label>
+                <label className="inventory-filter">
+                  Fecha hasta
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom || undefined}
+                    onChange={changeFilter(setDateTo)}
+                  />
+                </label>
+              </>
             ) : null}
           </div>
         </div>
+
+        {view === "totals" ? (
+          <p className="inventory-scope-note">
+            Totales por producto y unidad de medida, únicamente en bodegas
+            asignadas y autorizadas. Los filtros de existencias coinciden si el
+            estado aparece en al menos una de esas bodegas.
+          </p>
+        ) : null}
+
+        {categoriesQuery.isError && canRead ? (
+          <StateMessage tone="warning">
+            No fue posible cargar las categorías; puedes continuar con los demás
+            filtros.
+          </StateMessage>
+        ) : null}
 
         {activeQuery.isError ? (
           <StateMessage tone="warning">

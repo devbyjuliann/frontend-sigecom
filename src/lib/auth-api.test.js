@@ -5,6 +5,7 @@ import {
   customersApi,
   dashboardApi,
   productsApi,
+  purchasesApi,
   suppliersApi,
   warehousesApi,
 } from "./auth-api.js";
@@ -421,6 +422,32 @@ describe("authApi", () => {
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/dashboard",
       expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+});
+
+describe("purchasesApi", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("serializes purchase-order filters and targets the order resource", async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({ items: [] }));
+    vi.stubGlobal("fetch", fetch);
+
+    await purchasesApi.list({ page: 2, q: "OC-15", status: "confirmed" });
+    await purchasesApi.get("15");
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/purchase-orders?page=2&q=OC-15&status=confirmed",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/purchase-orders/15",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 });

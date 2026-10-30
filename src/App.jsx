@@ -37,6 +37,11 @@ const SuppliersPage = lazy(() =>
     default: pages.SuppliersPage,
   })),
 );
+const PurchasesPage = lazy(() => import("./pages/purchases-page.jsx"));
+const PurchaseFormPage = lazy(() => import("./pages/purchase-form-page.jsx"));
+const PurchaseDetailPage = lazy(
+  () => import("./pages/purchase-detail-page.jsx"),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -125,6 +130,21 @@ function AppRoutes() {
           <Route element={<RequirePermission permission="suppliers.read" />}>
             <Route element={<AppShell />}>
               <Route path="/proveedores" element={<SuppliersPage />} />
+            </Route>
+          </Route>
+          <Route element={<RequirePermission permission="purchases.read" />}>
+            <Route element={<AppShell />}>
+              <Route path="/compras" element={<PurchasesPage />} />
+              <Route path="/compras/:id" element={<PurchaseDetailPage />} />
+            </Route>
+          </Route>
+          <Route element={<RequirePermission permission="purchases.create" />}>
+            <Route element={<AppShell />}>
+              <Route path="/compras/nueva" element={<PurchaseFormPage />} />
+              <Route
+                path="/compras/:id/editar"
+                element={<PurchaseFormPage />}
+              />
             </Route>
           </Route>
           <Route path="/" element={<Navigate to="/inicio" replace />} />
