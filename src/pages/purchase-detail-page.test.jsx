@@ -22,18 +22,34 @@ vi.mock("../lib/auth-api.js", () => ({
     updateCommercialCode: vi.fn(),
     receipts: vi.fn(),
     receive: vi.fn(),
+    close: vi.fn(),
+    returns: vi.fn(),
+    returnDocument: vi.fn(),
+    createReturn: vi.fn(),
   },
 }));
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
 
-function renderPage(orderOverrides = {}, onClient) {
+function renderPage(
+  orderOverrides = {},
+  onClient,
+  receiptItems = [],
+  sessionOverrides = {},
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   useAuth.mockReturnValue({
     session: {
-      user: { role: "administrator" },
-      permissions: ["purchases.read", "purchases.receive", "purchases.create"],
+      user: { role: "administrator", ...sessionOverrides.user },
+      permissions: [
+        "purchases.read",
+        "purchases.receive",
+        "purchases.create",
+        "purchases.close",
+        ...(sessionOverrides.returnPermission ? ["purchases.return"] : []),
+      ],
+      ...sessionOverrides,
     },
   });
   purchasesApi.get.mockResolvedValue({
@@ -53,6 +69,7 @@ function renderPage(orderOverrides = {}, onClient) {
         unit: "bulto",
         quantity: 8,
         receivedQuantity: 3,
+        closedQuantity: 0,
         pendingQuantity: 5,
         unitCost: "100.00",
         lineTotal: "800.00",
@@ -60,7 +77,8 @@ function renderPage(orderOverrides = {}, onClient) {
     ],
     ...orderOverrides,
   });
-  purchasesApi.receipts.mockResolvedValue({ items: [] });
+  purchasesApi.receipts.mockResolvedValue({ items: receiptItems });
+  purchasesApi.returns.mockResolvedValue({ items: [] });
   onClient?.(client);
   return render(
     <QueryClientProvider client={client}>
@@ -113,6 +131,7 @@ describe("PurchaseDetailPage receipts", () => {
       "bulto",
       "8",
       "3",
+      "0",
       "5",
       "$ 100,00",
       "$ 800,00",
@@ -218,6 +237,192 @@ describe("PurchaseDetailPage receipts", () => {
     ).toBeInTheDocument();
   });
 
+  it("reviews, confirms and refreshes a receipt-linked supplier return", async () => {
+    const receipt = {
+      id: "55",
+      reference: "REC-55",
+      receivedAt: "2026-10-30T12:00:00.000Z",
+      receivedByName: "Admin Compras",
+      lines: [
+        {
+          id: "71",
+          name: "Arroz",
+          sku: "ARR-1",
+          unit: "bulto",
+          quantity: 4,
+          returnedQuantity: 1,
+          returnableQuantity: 3,
+        },
+      ],
+    };
+    renderPage({}, undefined, [receipt], { returnPermission: true });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /devolver mercancía/i }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Devolver mercancía al proveedor",
+    });
+    expect(
+      within(dialog).getByText(/Recibida 4, devuelta 1, máximo 3/),
+    ).toBeInTheDocument();
+    fireEvent.change(
+      within(dialog).getByLabelText("Referencia de devolución"),
+      { target: { value: "DEV-55" } },
+    );
+    fireEvent.change(within(dialog).getByLabelText("Motivo"), {
+      target: { value: "Empaque averiado" },
+    });
+    fireEvent.change(
+      within(dialog).getByRole("spinbutton", {
+        name: "Cantidad a devolver de Arroz",
+      }),
+      { target: { value: "2" } },
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Revisar devolución" }),
+    );
+    const review = await screen.findByRole("dialog", {
+      name: "Revisar devolución",
+    });
+    expect(
+      within(review).getByText(/descontará existencias disponibles/),
+    ).toBeInTheDocument();
+    purchasesApi.createReturn.mockResolvedValue({ id: "88", replayed: false });
+    fireEvent.click(
+      within(review).getByRole("button", { name: "Confirmar devolución" }),
+    );
+    await waitFor(() =>
+      expect(purchasesApi.createReturn).toHaveBeenCalledTimes(1),
+    );
+    expect(purchasesApi.createReturn).toHaveBeenCalledWith(
+      "12",
+      "55",
+      {
+        reference: "DEV-55",
+        reason: "Empaque averiado",
+        lines: [{ purchaseReceiptLineId: "71", quantity: 2 }],
+      },
+      expect.any(String),
+    );
+  });
+
+  it("reviews and confirms irreversible closure, then shows closed quantities and audit metadata", async () => {
+    let client;
+    renderPage(
+      {},
+      (queryClient) => {
+        client = queryClient;
+      },
+      [
+        {
+          id: "55",
+          reference: "REC-55",
+          receivedAt: "2026-10-30T12:00:00.000Z",
+          receivedByName: "Admin Compras",
+          lines: [],
+        },
+      ],
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: "Cerrar cantidades pendientes",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Cerrar cantidades pendientes" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Cerrar cantidades pendientes",
+    });
+    expect(within(dialog).getByText(/irreversible/i)).toBeInTheDocument();
+    expect(within(dialog).getByText("Arroz")).toBeInTheDocument();
+    expect(within(dialog).getByText("5 bulto")).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Motivo del cierre *"), {
+      target: { value: "Proveedor confirmó que no entregará el remanente" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Revisar cierre definitivo",
+      }),
+    );
+    const review = await screen.findByRole("dialog", {
+      name: "Confirmar cierre definitivo",
+    });
+    expect(within(review).getByText("5 bulto")).toBeInTheDocument();
+    purchasesApi.close.mockResolvedValue({
+      id: "12",
+      number: "OC-000012",
+      orderDate: "2026-10-29",
+      supplierName: "Proveedor Norte",
+      supplierIdentification: "900123456",
+      warehouseName: "Bodega Central",
+      total: "800.00",
+      version: 4,
+      status: "confirmed",
+      closure: {
+        reason: "Proveedor confirmó que no entregará el remanente",
+        closedByName: "Admin Compras",
+        closedAt: "2026-10-30T18:00:00.000Z",
+      },
+      lines: [
+        {
+          id: "31",
+          name: "Arroz",
+          sku: "ARR-1",
+          unit: "bulto",
+          quantity: 8,
+          receivedQuantity: 3,
+          closedQuantity: 5,
+          pendingQuantity: 0,
+          unitCost: "100.00",
+          lineTotal: "800.00",
+        },
+      ],
+    });
+    fireEvent.click(
+      within(review).getByRole("button", { name: "Confirmar cierre" }),
+    );
+    await waitFor(() => expect(purchasesApi.close).toHaveBeenCalledTimes(1));
+    expect(purchasesApi.close).toHaveBeenCalledWith(
+      "12",
+      {
+        expectedVersion: 3,
+        reason: "Proveedor confirmó que no entregará el remanente",
+      },
+      expect.any(String),
+    );
+    await waitFor(() =>
+      expect(
+        client.getQueryData(["purchase-order", "12"]).closure.reason,
+      ).toContain("no entregará"),
+    );
+    expect(screen.getAllByText("Pendientes cerrados")).toHaveLength(2);
+    expect(
+      screen.getAllByText("Proveedor confirmó que no entregará el remanente"),
+    ).toHaveLength(2);
+    expect(
+      within(
+        screen.getByRole("table", { name: "Productos de la orden" }),
+      ).getByRole("columnheader", { name: "Cantidad cerrada" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cerrar cantidades pendientes" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the closure action when either the role or permission is missing", async () => {
+    renderPage(
+      {},
+      undefined,
+      [{ id: "55", receivedAt: "2026-10-30T12:00:00.000Z", lines: [] }],
+      { permissions: ["purchases.read", "purchases.receive"] },
+    );
+    await screen.findByRole("heading", { name: "Recepciones de mercancía" });
+    expect(
+      screen.queryByRole("button", { name: "Cerrar cantidades pendientes" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows zero received and full pending when there are no receipts", async () => {
     renderPage({
       lines: [
@@ -242,8 +447,8 @@ describe("PurchaseDetailPage receipts", () => {
       within(row)
         .getAllByRole("cell")
         .map((cell) => cell.textContent)
-        .slice(3, 6),
-    ).toEqual(["8", "0", "8"]);
+        .slice(3, 7),
+    ).toEqual(["8", "0", "0", "8"]);
   });
 
   it("shows zero pending for a completely received order", async () => {

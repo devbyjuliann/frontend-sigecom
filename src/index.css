@@ -2265,6 +2265,32 @@ p {
   color: #172033;
   font-size: 12px;
 }
+.purchase-dialog > input,
+.purchase-dialog > textarea {
+  width: 100%;
+  min-width: 0;
+  margin: 5px 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+}
+.purchase-return-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fffbeb;
+  color: #854d0e;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .purchase-receipt-review-lines {
   display: grid;
   max-height: 220px;
@@ -2363,6 +2389,10 @@ p {
   gap: 7px;
 }
 .purchase-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
   margin-top: 20px;
 }
 
@@ -3790,5 +3820,132 @@ p {
   }
   .partner-detail-heading > .status-badge {
     margin-left: 54px;
+  }
+}
+
+.purchase-closure-summary dd {
+  display: grid;
+  gap: 5px;
+}
+.purchase-closure-summary dd small,
+.purchase-closure-summary dd span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.purchase-closure-badge {
+  width: fit-content;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  padding: 4px 9px;
+  color: #1e40af;
+  font-size: 12px;
+  font-weight: 650;
+}
+.purchase-closure-history {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 20px;
+}
+.purchase-closure-history-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  color: #1e40af;
+}
+.purchase-closure-history-heading h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 16px;
+}
+.purchase-closure-history-heading p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.purchase-closure-history dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+}
+.purchase-closure-history dl > div {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+}
+.purchase-closure-history dt {
+  color: #64748b;
+  font-size: 12px;
+}
+.purchase-closure-history dd {
+  margin: 0;
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.purchase-closure-lines {
+  display: grid;
+  max-height: min(34vh, 280px);
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 0 12px;
+}
+.purchase-closure-lines p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  border-bottom: 1px solid #eef2f7;
+  padding: 11px 0;
+  color: #172033;
+  font-size: 13px;
+}
+.purchase-closure-lines p:last-child {
+  border-bottom: 0;
+}
+.purchase-closure-lines p > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.purchase-closure-lines small {
+  color: #64748b;
+  font-size: 11px;
+}
+.purchase-closure-lines p > strong {
+  flex: 0 0 auto;
+  text-align: right;
+}
+.purchase-closure-review-reason {
+  border-left: 3px solid #2563eb;
+  background: #f6f8fc;
+  padding: 10px 12px;
+  color: #172033;
+  font-size: 13px;
+}
+.purchase-closure-review-reason p {
+  margin: 5px 0 0;
+  color: #475569;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .purchase-closure-history {
+    padding: 16px;
+  }
+  .purchase-closure-history dl {
+    grid-template-columns: 1fr;
+    gap: 11px;
   }
 }

@@ -328,6 +328,28 @@ export const purchasesApi = {
       { idempotencyKey },
     );
   },
+  returns(id) {
+    return get(`/api/v1/purchase-orders/${encodeURIComponent(id)}/returns`);
+  },
+  returnDocument(id, returnId) {
+    return get(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/returns/${encodeURIComponent(returnId)}`,
+    );
+  },
+  createReturn(id, receiptId, input, idempotencyKey) {
+    return post(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/receipts/${encodeURIComponent(receiptId)}/returns`,
+      input,
+      { idempotencyKey },
+    );
+  },
+  close(id, input, idempotencyKey) {
+    return post(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/closure`,
+      input,
+      { idempotencyKey },
+    );
+  },
 };
 
 export const dashboardApi = {

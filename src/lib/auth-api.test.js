@@ -450,4 +450,75 @@ describe("purchasesApi", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+
+  it("closes purchase pending quantities through the CSRF and idempotency headers", async () => {
+    const input = {
+      expectedVersion: 4,
+      reason: "Proveedor no entregará el saldo",
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ csrfToken: "k".repeat(64) }, { status: 200 }),
+      )
+      .mockResolvedValueOnce(Response.json({ id: "15", closure: {} }));
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await purchasesApi.close("15", input, "closure-retry-key");
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/purchase-orders/15/closure",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: expect.objectContaining({
+          "X-CSRF-Token": "k".repeat(64),
+          "Idempotency-Key": "closure-retry-key",
+        }),
+        body: JSON.stringify(input),
+      }),
+    );
+  });
+
+  it("creates a receipt-linked supplier return with its idempotency key", async () => {
+    const input = {
+      reference: "DEV-42",
+      reason: "Empaque averiado",
+      lines: [{ purchaseReceiptLineId: "31", quantity: 2 }],
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken: "r".repeat(64) }))
+      .mockResolvedValueOnce(Response.json({ id: "55" }))
+      .mockResolvedValueOnce(Response.json({ items: [] }))
+      .mockResolvedValueOnce(Response.json({ id: "55" }));
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await purchasesApi.createReturn("15", "21", input, "return-key");
+    await purchasesApi.returns("15");
+    await purchasesApi.returnDocument("15", "55");
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/purchase-orders/15/receipts/21/returns",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Idempotency-Key": "return-key" }),
+        body: JSON.stringify(input),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/purchase-orders/15/returns",
+      expect.anything(),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/purchase-orders/15/returns/55",
+      expect.anything(),
+    );
+  });
 });

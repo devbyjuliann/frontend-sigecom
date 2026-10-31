@@ -6,6 +6,7 @@ import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { Warning } from "@phosphor-icons/react/Warning";
 import { Package } from "@phosphor-icons/react/Package";
 import { ClockCounterClockwise } from "@phosphor-icons/react/ClockCounterClockwise";
+import { ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -16,6 +17,11 @@ import { ApiError, purchasesApi } from "../lib/auth-api.js";
 function formatMoney(value) {
   const [whole, fractional = "00"] = String(value).split(".");
   return `$ ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${fractional.padEnd(2, "0").slice(0, 2)}`;
+}
+
+function formatReturnedQuantity(lines) {
+  const quantity = lines.reduce((sum, line) => sum + line.quantity, 0);
+  return `${quantity} ${quantity === 1 ? "unidad devuelta" : "unidades devueltas"}`;
 }
 const date = new Intl.DateTimeFormat("es-CO", {
   dateStyle: "medium",
@@ -31,9 +37,26 @@ function receiptStorageKey(orderId) {
   return `sigecom.purchase-receipt.pending.${orderId}`;
 }
 
+function closureStorageKey(orderId) {
+  return `sigecom.purchase-closure.pending.${orderId}`;
+}
+
+function returnStorageKey(orderId) {
+  return `sigecom.purchase-return.pending.${orderId}`;
+}
+
 function readPendingReceipt(orderId) {
   try {
     const raw = sessionStorage.getItem(receiptStorageKey(orderId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readPendingClosure(orderId) {
+  try {
+    const raw = sessionStorage.getItem(closureStorageKey(orderId));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -57,14 +80,33 @@ export default function PurchaseDetailPage() {
   const [commercialCode, setCommercialCode] = useState("");
   const [confirmZeroCost, setConfirmZeroCost] = useState(false);
   const [reason, setReason] = useState("");
+  const [closureReason, setClosureReason] = useState("");
+  const [closureOpen, setClosureOpen] = useState(false);
+  const [closureReviewOpen, setClosureReviewOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptReviewOpen, setReceiptReviewOpen] = useState(false);
   const [receiptReference, setReceiptReference] = useState("");
   const [receiptNotes, setReceiptNotes] = useState("");
   const [receiptQuantities, setReceiptQuantities] = useState({});
+  const [returnReceipt, setReturnReceipt] = useState(null);
+  const [returnReference, setReturnReference] = useState("");
+  const [returnReason, setReturnReason] = useState("");
+  const [returnQuantities, setReturnQuantities] = useState({});
+  const [returnReviewOpen, setReturnReviewOpen] = useState(false);
+  const [pendingReturn, setPendingReturn] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(returnStorageKey(id));
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const receiptKey = useRef(null);
   const [pendingReceipt, setPendingReceipt] = useState(() =>
     readPendingReceipt(id),
+  );
+  const [pendingClosure, setPendingClosure] = useState(() =>
+    readPendingClosure(id),
   );
   const order = useQuery({
     queryKey: ["purchase-order", id],
@@ -87,6 +129,97 @@ export default function PurchaseDetailPage() {
     queryFn: () => purchasesApi.receipts(id),
     enabled: order.data?.status === "confirmed",
     retry: false,
+  });
+  const returnHistory = useQuery({
+    queryKey: ["purchase-returns", id],
+    queryFn: () => purchasesApi.returns(id),
+    enabled: Boolean(order.data),
+    retry: false,
+  });
+  const canReturn =
+    canManage && session.permissions.includes("purchases.return");
+  const createReturn = useMutation({
+    mutationFn: () => {
+      const saved =
+        pendingReturn ||
+        (() => {
+          const request = {
+            key:
+              globalThis.crypto?.randomUUID?.() ||
+              `return-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            receiptId: returnReceipt.id,
+            input: {
+              reference: returnReference.trim(),
+              reason: returnReason.trim(),
+              lines: returnReceipt.lines
+                .filter((line) => Number(returnQuantities[line.id]) > 0)
+                .map((line) => ({
+                  purchaseReceiptLineId: line.id,
+                  quantity: Number(returnQuantities[line.id]),
+                })),
+            },
+          };
+          try {
+            sessionStorage.setItem(
+              returnStorageKey(id),
+              JSON.stringify(request),
+            );
+          } catch {
+            /* In-memory retry retains the request. */
+          }
+          setPendingReturn(request);
+          return request;
+        })();
+      return purchasesApi.createReturn(
+        id,
+        saved.receiptId,
+        saved.input,
+        saved.key,
+      );
+    },
+    onSuccess: async (result) => {
+      setPendingReturn(null);
+      try {
+        sessionStorage.removeItem(returnStorageKey(id));
+      } catch {
+        /* Ignore unavailable storage. */
+      }
+      setReturnReviewOpen(false);
+      setReturnReceipt(null);
+      setReturnReference("");
+      setReturnReason("");
+      setReturnQuantities({});
+      await Promise.all([
+        order.refetch(),
+        receipts.refetch(),
+        returnHistory.refetch(),
+        client.invalidateQueries({ queryKey: ["inventory"] }),
+        client.invalidateQueries({ queryKey: ["purchase-orders"] }),
+      ]);
+      toast.success(
+        result.replayed
+          ? "Se recuperó la devolución confirmada."
+          : "Devolución confirmada y existencias descontadas.",
+      );
+    },
+    onError: (error) => {
+      if (!error.status || error.status === 408 || error.status >= 500) {
+        setReturnReviewOpen(false);
+        setReturnReceipt(null);
+      }
+      if (error.status >= 400 && error.status < 500 && error.status !== 408) {
+        setPendingReturn(null);
+        try {
+          sessionStorage.removeItem(returnStorageKey(id));
+        } catch {
+          // Ignore unavailable browser storage.
+        }
+      }
+      toast.error(
+        error.message ||
+          "No se pudo confirmar la devolución. Si la respuesta fue incierta, reintenta sin cambiar los datos.",
+      );
+    },
   });
 
   async function refresh(updated) {
@@ -236,6 +369,63 @@ export default function PurchaseDetailPage() {
       toast.error(error.message || "No se pudo confirmar la recepción.");
     },
   });
+  const close = useMutation({
+    mutationFn: () => {
+      const saved = pendingClosure || readPendingClosure(id);
+      const request = saved || {
+        key: createReceiptKey(),
+        input: {
+          expectedVersion: item.version,
+          reason: closureReason.trim(),
+        },
+      };
+      if (!saved) {
+        setPendingClosure(request);
+        try {
+          sessionStorage.setItem(
+            closureStorageKey(id),
+            JSON.stringify(request),
+          );
+        } catch {
+          // The current page retains the request for in-session retries.
+        }
+      }
+      return purchasesApi.close(id, request.input, request.key);
+    },
+    onSuccess: async (updated) => {
+      setPendingClosure(null);
+      try {
+        sessionStorage.removeItem(closureStorageKey(id));
+      } catch {
+        // Ignore unavailable browser storage; the server remains authoritative.
+      }
+      setClosureOpen(false);
+      setClosureReviewOpen(false);
+      await refresh(updated);
+      await Promise.all([
+        receipts.refetch(),
+        client.invalidateQueries({ queryKey: ["purchase-orders"] }),
+      ]);
+      toast.success(
+        updated.replayed
+          ? "Se recuperó el cierre registrado anteriormente."
+          : "Cantidades pendientes cerradas definitivamente.",
+      );
+    },
+    onError: (error) => {
+      if (error.status >= 400 && error.status < 500 && error.status !== 408) {
+        setPendingClosure(null);
+        try {
+          sessionStorage.removeItem(closureStorageKey(id));
+        } catch {
+          // Ignore unavailable browser storage.
+        }
+      }
+      toast.error(
+        error.message || "No se pudieron cerrar las cantidades pendientes.",
+      );
+    },
+  });
 
   if (order.isPending)
     return (
@@ -262,6 +452,14 @@ export default function PurchaseDetailPage() {
     );
 
   const item = order.data;
+  const hasPending = item.lines.some((line) => line.pendingQuantity > 0);
+  const canClose =
+    canManage &&
+    session.permissions.includes("purchases.close") &&
+    item.status === "confirmed" &&
+    !item.closure &&
+    hasPending &&
+    (receipts.data?.items?.length || 0) > 0;
   return (
     <section className="page-section purchase-page">
       <Link className="purchase-back-link" to="/compras">
@@ -328,8 +526,9 @@ export default function PurchaseDetailPage() {
                     <th>SKU</th>
                     <th>Unidad</th>
                     <th>Cantidad pedida</th>
-                    <th>Recibida</th>
-                    <th>Pendiente</th>
+                    <th>Cantidad recibida</th>
+                    <th>Cantidad cerrada</th>
+                    <th>Cantidad pendiente</th>
                     <th>Costo unitario</th>
                     <th>Subtotal</th>
                   </tr>
@@ -348,6 +547,11 @@ export default function PurchaseDetailPage() {
                       <td>
                         {new Intl.NumberFormat("es-CO").format(
                           line.receivedQuantity ?? 0,
+                        )}
+                      </td>
+                      <td>
+                        {new Intl.NumberFormat("es-CO").format(
+                          line.closedQuantity ?? 0,
                         )}
                       </td>
                       <td>
@@ -423,6 +627,21 @@ export default function PurchaseDetailPage() {
               <dt>Estado</dt>
               <dd>{statusLabels[item.status]}</dd>
             </div>
+            {item.closure ? (
+              <div className="purchase-closure-summary">
+                <dt>Cierre de pendientes</dt>
+                <dd>
+                  <strong className="purchase-closure-badge">
+                    Pendientes cerrados
+                  </strong>
+                  <small>
+                    {date.format(new Date(item.closure.closedAt))} ·{" "}
+                    {item.closure.closedByName}
+                  </small>
+                  <span>{item.closure.reason}</span>
+                </dd>
+              </div>
+            ) : null}
           </dl>
           {item.status === "confirmed" && !canReceive ? (
             <p className="purchase-readonly-note">
@@ -459,6 +678,27 @@ export default function PurchaseDetailPage() {
                 Cancelar orden
               </Button>
             ) : null}
+            {canClose && !pendingClosure ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setClosureReason("");
+                  close.reset();
+                  setClosureOpen(true);
+                }}
+              >
+                Cerrar cantidades pendientes
+              </Button>
+            ) : null}
+            {item.status === "confirmed" && pendingClosure ? (
+              <Button
+                variant="secondary"
+                disabled={close.isPending}
+                onClick={() => close.mutate()}
+              >
+                {close.isPending ? "Verificando…" : "Reintentar cierre"}
+              </Button>
+            ) : null}
           </div>
         </aside>
       </div>
@@ -476,6 +716,7 @@ export default function PurchaseDetailPage() {
               </p>
             </div>
             {canReceive &&
+            !item.closure &&
             !pendingReceipt &&
             item.lines.some((line) => line.pendingQuantity > 0) ? (
               <Button onClick={() => setReceiptOpen(true)}>
@@ -488,9 +729,10 @@ export default function PurchaseDetailPage() {
               <thead>
                 <tr>
                   <th>Producto</th>
-                  <th>Pedida</th>
-                  <th>Recibida</th>
-                  <th>Pendiente</th>
+                  <th>Cantidad pedida</th>
+                  <th>Cantidad recibida</th>
+                  <th>Cantidad cerrada</th>
+                  <th>Cantidad pendiente</th>
                 </tr>
               </thead>
               <tbody>
@@ -504,6 +746,7 @@ export default function PurchaseDetailPage() {
                     </td>
                     <td>{line.quantity}</td>
                     <td>{line.receivedQuantity ?? 0}</td>
+                    <td>{line.closedQuantity ?? 0}</td>
                     <td>
                       <strong>{line.pendingQuantity ?? line.quantity}</strong>
                     </td>
@@ -552,12 +795,35 @@ export default function PurchaseDetailPage() {
                       <p key={line.id}>
                         <span>
                           {line.name} · {line.sku}
+                          <small>
+                            Recibida {line.quantity} {line.unit} · Devuelta{" "}
+                            {line.returnedQuantity || 0} · Disponible para
+                            devolver {line.returnableQuantity ?? line.quantity}
+                          </small>
                         </span>
                         <strong>
                           {line.quantity} {line.unit}
                         </strong>
                       </p>
                     ))}
+                    {canReturn &&
+                    receipt.lines.some(
+                      (line) => line.returnableQuantity > 0,
+                    ) ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setReturnReceipt(receipt);
+                          setReturnReference("");
+                          setReturnReason("");
+                          setReturnQuantities({});
+                          createReturn.reset();
+                        }}
+                      >
+                        <ArrowCounterClockwise size={16} aria-hidden="true" />{" "}
+                        Devolver mercancía
+                      </Button>
+                    ) : null}
                   </div>
                 </details>
               ))
@@ -588,6 +854,242 @@ export default function PurchaseDetailPage() {
           </div>
         </section>
       ) : null}
+
+      <section
+        className="purchase-receipt-history"
+        aria-labelledby="purchase-returns-heading"
+      >
+        <h3 id="purchase-returns-heading">
+          <ArrowCounterClockwise size={17} aria-hidden="true" /> Devoluciones a
+          proveedor
+        </h3>
+        {returnHistory.isPending ? (
+          <p role="status">Cargando devoluciones…</p>
+        ) : null}
+        {returnHistory.isError ? (
+          <div className="purchase-form-error" role="alert">
+            No fue posible cargar el historial.{" "}
+            <Button variant="ghost" onClick={() => returnHistory.refetch()}>
+              Reintentar
+            </Button>
+          </div>
+        ) : null}
+        {returnHistory.data?.items?.length ? (
+          returnHistory.data.items.map((item) => (
+            <details className="purchase-receipt-entry" key={item.id}>
+              <summary>
+                <span>
+                  <strong>
+                    {item.reference} · {item.number}
+                  </strong>
+                  <small>
+                    {date.format(new Date(item.returnedAt))} · Recepción{" "}
+                    {item.receiptReference} · {item.returnedByName}
+                  </small>
+                </span>
+                <span>{formatReturnedQuantity(item.lines)}</span>
+              </summary>
+              <div className="purchase-receipt-expanded">
+                <p>{item.reason}</p>
+                {item.lines.map((line) => (
+                  <p key={line.id}>
+                    <span>
+                      {line.name} · {line.sku}
+                    </span>
+                    <strong>
+                      {line.quantity} {line.unit}
+                    </strong>
+                  </p>
+                ))}
+                <p>
+                  Existencias descontadas en {item.warehouseName} · Operación{" "}
+                  {item.sourceOperationId}
+                </p>
+              </div>
+            </details>
+          ))
+        ) : returnHistory.isSuccess ? (
+          <p className="purchase-empty-history">
+            Aún no se han registrado devoluciones.
+          </p>
+        ) : null}
+      </section>
+
+      {pendingReturn ? (
+        <div className="purchase-receipt-retry" role="status">
+          <span>
+            Hay una solicitud de devolución pendiente de confirmar para «
+            {pendingReturn.input.reference}». Reintentar conservará la misma
+            solicitud y clave.
+          </span>
+          <Button
+            variant="secondary"
+            disabled={createReturn.isPending}
+            onClick={() => createReturn.mutate()}
+          >
+            {createReturn.isPending ? "Verificando…" : "Reintentar devolución"}
+          </Button>
+        </div>
+      ) : null}
+
+      {item.closure ? (
+        <section
+          className="purchase-closure-history"
+          aria-label="Cierre de cantidades pendientes"
+        >
+          <div className="purchase-closure-history-heading">
+            <Warning size={19} aria-hidden="true" />
+            <div>
+              <h2>Pendientes cerrados</h2>
+              <p>
+                El cierre es definitivo y no modifica las existencias ni el
+                historial de recepciones.
+              </p>
+            </div>
+          </div>
+          <dl>
+            <div>
+              <dt>Fecha</dt>
+              <dd>{date.format(new Date(item.closure.closedAt))}</dd>
+            </div>
+            <div>
+              <dt>Responsable</dt>
+              <dd>{item.closure.closedByName}</dd>
+            </div>
+            <div>
+              <dt>Motivo</dt>
+              <dd>{item.closure.reason}</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+
+      <Dialog.Root open={closureOpen} onOpenChange={setClosureOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="purchase-dialog-overlay" />
+          <Dialog.Content
+            className="purchase-dialog"
+            aria-describedby="closure-description"
+          >
+            <Dialog.Title>Cerrar cantidades pendientes</Dialog.Title>
+            <Dialog.Description id="closure-description">
+              Este cierre es irreversible. No cambiará las cantidades pedidas,
+              las recepciones ni las existencias.
+            </Dialog.Description>
+            <div
+              className="purchase-closure-lines"
+              aria-label="Remanentes que se cerrarán"
+            >
+              {item.lines
+                .filter((line) => line.pendingQuantity > 0)
+                .map((line) => (
+                  <p key={line.id}>
+                    <span>
+                      <strong>{line.name}</strong>
+                      <small>
+                        {line.sku} · {line.unit}
+                      </small>
+                    </span>
+                    <strong>
+                      {line.pendingQuantity} {line.unit}
+                    </strong>
+                  </p>
+                ))}
+            </div>
+            <label className="purchase-field" htmlFor="purchase-closure-reason">
+              Motivo del cierre *
+            </label>
+            <textarea
+              id="purchase-closure-reason"
+              rows={3}
+              minLength={3}
+              maxLength={500}
+              required
+              value={closureReason}
+              onChange={(event) => setClosureReason(event.target.value)}
+            />
+            {close.error ? (
+              <p className="purchase-form-error" role="alert">
+                {close.error.message}
+              </p>
+            ) : null}
+            <div className="purchase-dialog-actions">
+              <Dialog.Close asChild>
+                <Button variant="secondary">Volver</Button>
+              </Dialog.Close>
+              <Button
+                disabled={
+                  closureReason.trim().length < 3 ||
+                  closureReason.trim().length > 500
+                }
+                onClick={() => {
+                  close.reset();
+                  setClosureOpen(false);
+                  setClosureReviewOpen(true);
+                }}
+              >
+                Revisar cierre definitivo
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={closureReviewOpen} onOpenChange={setClosureReviewOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="purchase-dialog-overlay" />
+          <Dialog.Content
+            className="purchase-dialog"
+            aria-describedby="closure-review-description"
+          >
+            <Dialog.Title>Confirmar cierre definitivo</Dialog.Title>
+            <Dialog.Description id="closure-review-description">
+              Se cerrarán todas las cantidades pendientes indicadas. Esta acción
+              no se puede deshacer y bloqueará nuevas recepciones.
+            </Dialog.Description>
+            <div className="purchase-closure-lines">
+              {item.lines
+                .filter((line) => line.pendingQuantity > 0)
+                .map((line) => (
+                  <p key={line.id}>
+                    <span>
+                      <strong>{line.name}</strong>
+                      <small>
+                        {line.sku} · {line.unit}
+                      </small>
+                    </span>
+                    <strong>
+                      {line.pendingQuantity} {line.unit}
+                    </strong>
+                  </p>
+                ))}
+            </div>
+            <div className="purchase-closure-review-reason">
+              <strong>Motivo</strong>
+              <p>{closureReason.trim()}</p>
+            </div>
+            {close.error ? (
+              <p className="purchase-form-error" role="alert">
+                {close.error.message}
+              </p>
+            ) : null}
+            <div className="purchase-dialog-actions">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setClosureReviewOpen(false);
+                  setClosureOpen(true);
+                }}
+              >
+                Volver a revisar
+              </Button>
+              <Button disabled={close.isPending} onClick={() => close.mutate()}>
+                {close.isPending ? "Cerrando…" : "Confirmar cierre"}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <Dialog.Root open={receiptOpen} onOpenChange={setReceiptOpen}>
         <Dialog.Portal>
@@ -921,6 +1423,156 @@ export default function PurchaseDetailPage() {
                 {cancel.isPending ? "Cancelando…" : "Confirmar cancelación"}
               </Button>
             </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root
+        open={Boolean(returnReceipt)}
+        onOpenChange={(open) => {
+          if (!open && !createReturn.isPending) {
+            setReturnReceipt(null);
+            setReturnReviewOpen(false);
+          }
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="purchase-dialog-overlay" />
+          <Dialog.Content
+            className="purchase-dialog"
+            aria-describedby="supplier-return-description"
+          >
+            <Dialog.Title>
+              {returnReviewOpen
+                ? "Revisar devolución"
+                : "Devolver mercancía al proveedor"}
+            </Dialog.Title>
+            <Dialog.Description id="supplier-return-description">
+              Recepción {returnReceipt?.reference} · {item.supplierName} ·
+              Bodega {item.warehouseName}. La devolución descontará existencias
+              disponibles; no cambia lo recibido ni reabre pendientes.
+            </Dialog.Description>
+            {!returnReviewOpen ? (
+              <>
+                <label className="purchase-field" htmlFor="return-reference">
+                  Referencia de devolución
+                </label>
+                <input
+                  id="return-reference"
+                  maxLength={120}
+                  value={returnReference}
+                  onChange={(event) => setReturnReference(event.target.value)}
+                  required
+                />
+                <label className="purchase-field" htmlFor="return-reason">
+                  Motivo
+                </label>
+                <textarea
+                  id="return-reason"
+                  rows={3}
+                  maxLength={500}
+                  value={returnReason}
+                  onChange={(event) => setReturnReason(event.target.value)}
+                  required
+                />
+                <div className="purchase-receipt-review-lines">
+                  {returnReceipt?.lines.map((line) => (
+                    <label className="purchase-receipt-line" key={line.id}>
+                      <span>
+                        <strong>{line.name}</strong>
+                        <small>
+                          {line.sku} · {line.unit} · Recibida {line.quantity},
+                          devuelta {line.returnedQuantity || 0}, máximo{" "}
+                          {line.returnableQuantity ?? line.quantity}
+                        </small>
+                      </span>
+                      <input
+                        aria-label={`Cantidad a devolver de ${line.name}`}
+                        type="number"
+                        min="0"
+                        max={line.returnableQuantity ?? line.quantity}
+                        step="1"
+                        inputMode="numeric"
+                        value={returnQuantities[line.id] || ""}
+                        onChange={(event) =>
+                          setReturnQuantities((current) => ({
+                            ...current,
+                            [line.id]: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="purchase-dialog-actions">
+                  <Dialog.Close asChild>
+                    <Button variant="secondary">Cancelar</Button>
+                  </Dialog.Close>
+                  <Button
+                    disabled={
+                      !returnReference.trim() ||
+                      returnReason.trim().length < 3 ||
+                      !returnReceipt?.lines.some(
+                        (line) => Number(returnQuantities[line.id]) > 0,
+                      )
+                    }
+                    onClick={() => setReturnReviewOpen(true)}
+                  >
+                    Revisar devolución
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="purchase-receipt-review-lines">
+                  <p>
+                    <strong>Referencia:</strong> {returnReference.trim()}
+                  </p>
+                  <p>
+                    <strong>Motivo:</strong> {returnReason.trim()}
+                  </p>
+                  {returnReceipt?.lines
+                    .filter((line) => Number(returnQuantities[line.id]) > 0)
+                    .map((line) => (
+                      <p key={line.id}>
+                        <span>
+                          {line.name} · {line.sku}
+                        </span>
+                        <strong>
+                          {Number(returnQuantities[line.id])} {line.unit}
+                        </strong>
+                      </p>
+                    ))}
+                </div>
+                <p className="purchase-return-warning">
+                  <Warning size={17} aria-hidden="true" /> Al confirmar, estas
+                  unidades saldrán de las existencias de {item.warehouseName}.
+                  Esta operación confirmada no se puede editar ni anular.
+                </p>
+                {createReturn.error ? (
+                  <p className="purchase-form-error" role="alert">
+                    {createReturn.error.message}
+                  </p>
+                ) : null}
+                <div className="purchase-dialog-actions">
+                  <Button
+                    variant="secondary"
+                    disabled={createReturn.isPending}
+                    onClick={() => setReturnReviewOpen(false)}
+                  >
+                    Volver a editar
+                  </Button>
+                  <Button
+                    disabled={createReturn.isPending}
+                    onClick={() => createReturn.mutate()}
+                  >
+                    {createReturn.isPending
+                      ? "Confirmando…"
+                      : "Confirmar devolución"}
+                  </Button>
+                </div>
+              </>
+            )}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
