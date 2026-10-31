@@ -99,7 +99,7 @@ async function get(path) {
   return readResponse(response);
 }
 
-async function patch(path, body) {
+async function patch(path, body, { idempotencyKey } = {}) {
   const token = csrfToken || (await getCsrfToken());
   let response;
   try {
@@ -110,6 +110,7 @@ async function patch(path, body) {
         Accept: "application/json",
         "Content-Type": "application/json",
         "X-CSRF-Token": token,
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify(body),
     });
@@ -349,6 +350,33 @@ export const purchasesApi = {
       input,
       { idempotencyKey },
     );
+  },
+};
+
+export const salesApi = {
+  list(filters = {}) {
+    return get(`/api/v1/sales${queryString(filters)}`);
+  },
+  get(id) {
+    return get(`/api/v1/sales/${encodeURIComponent(id)}`);
+  },
+  create(input, idempotencyKey) {
+    return post("/api/v1/sales", input, { idempotencyKey });
+  },
+  update(id, input, idempotencyKey) {
+    return patch(`/api/v1/sales/${encodeURIComponent(id)}`, input, {
+      idempotencyKey,
+    });
+  },
+  cancel(id, input, idempotencyKey) {
+    return post(`/api/v1/sales/${encodeURIComponent(id)}/cancellation`, input, {
+      idempotencyKey,
+    });
+  },
+  confirm(id, input, idempotencyKey) {
+    return post(`/api/v1/sales/${encodeURIComponent(id)}/confirmation`, input, {
+      idempotencyKey,
+    });
   },
 };
 

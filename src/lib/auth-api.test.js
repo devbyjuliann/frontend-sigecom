@@ -6,6 +6,7 @@ import {
   dashboardApi,
   productsApi,
   purchasesApi,
+  salesApi,
   suppliersApi,
   warehousesApi,
 } from "./auth-api.js";
@@ -422,6 +423,80 @@ describe("authApi", () => {
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/dashboard",
       expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+});
+
+describe("salesApi", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("uses only authorized draft document routes with CSRF and idempotency keys", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken: "s".repeat(64) }))
+      .mockResolvedValueOnce(Response.json({ items: [] }))
+      .mockResolvedValueOnce(Response.json({ id: "4" }))
+      .mockResolvedValueOnce(Response.json({ id: "4" }))
+      .mockResolvedValueOnce(Response.json({ id: "4" }))
+      .mockResolvedValueOnce(Response.json({ id: "4" }))
+      .mockResolvedValueOnce(Response.json({ id: "4" }));
+    vi.stubGlobal("fetch", fetch);
+
+    await authApi.refreshCsrf();
+    await salesApi.list({ page: 2, status: "draft", warehouseId: "8" });
+    await salesApi.get("4");
+    await salesApi.create({ customerId: "2" }, "sale-create-key");
+    await salesApi.update("4", { expectedVersion: 1 }, "sale-update-key");
+    await salesApi.cancel(
+      "4",
+      { expectedVersion: 2, reason: "Solicitud cliente" },
+      "sale-cancel-key",
+    );
+    await salesApi.confirm("4", { expectedVersion: 2 }, "sale-confirm-key");
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/sales?page=2&status=draft&warehouseId=8",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/sales/4",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      5,
+      "/api/v1/sales/4",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({
+          "Idempotency-Key": "sale-update-key",
+        }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      6,
+      "/api/v1/sales/4/cancellation",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Idempotency-Key": "sale-cancel-key",
+        }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      7,
+      "/api/v1/sales/4/confirmation",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ expectedVersion: 2 }),
+        headers: expect.objectContaining({
+          "Idempotency-Key": "sale-confirm-key",
+        }),
+      }),
     );
   });
 });
