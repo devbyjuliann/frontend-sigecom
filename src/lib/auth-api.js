@@ -378,6 +378,17 @@ export const salesApi = {
       idempotencyKey,
     });
   },
+  reverse(id, input, idempotencyKey) {
+    return post(`/api/v1/sales/${encodeURIComponent(id)}/reversal`, input, {
+      idempotencyKey,
+    });
+  },
+  getReversal(id) {
+    return get(`/api/v1/sales/${encodeURIComponent(id)}/reversal`);
+  },
+  reversalPdfUrl(id) {
+    return `/api/v1/sales/${encodeURIComponent(id)}/reversal/pdf`;
+  },
 };
 
 export const dashboardApi = {

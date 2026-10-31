@@ -3,6 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowLeft } from "@phosphor-icons/react/ArrowLeft";
 import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { Warning } from "@phosphor-icons/react/Warning";
+import { DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -81,14 +82,56 @@ function storePendingCancellation(id, value) {
   }
 }
 
+function reversalStorageKey(id) {
+  return `sigecom.sale-reversal.pending.${id}`;
+}
+
+function readPendingReversal(id) {
+  try {
+    const value = sessionStorage.getItem(reversalStorageKey(id));
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storePendingReversal(id, value) {
+  try {
+    if (value)
+      sessionStorage.setItem(reversalStorageKey(id), JSON.stringify(value));
+    else sessionStorage.removeItem(reversalStorageKey(id));
+  } catch {
+    // Keep the request in memory if browser storage is unavailable.
+  }
+}
+
 export default function SaleDetailPage() {
   const { id } = useParams();
   const { session } = useAuth();
   const client = useQueryClient();
   const [savedCancellation] = useState(() => readPendingCancellation(id));
   const pendingCancellation = useRef(savedCancellation);
+  const [savedReversal] = useState(() => readPendingReversal(id));
+  const pendingReversal = useRef(savedReversal);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState(() => savedCancellation?.reason || "");
+  const [reversalReason, setReversalReason] = useState(
+    () => savedReversal?.input?.reason || "",
+  );
+  const [reversalReference, setReversalReference] = useState(
+    () => savedReversal?.input?.reference || "",
+  );
+  const [reversalObservation, setReversalObservation] = useState(
+    () => savedReversal?.input?.physicalObservation || "",
+  );
+  const [declarations, setDeclarations] = useState({
+    neverDispatched: savedReversal?.input?.neverDispatched || false,
+    allQuantitiesPresent: savedReversal?.input?.allQuantitiesPresent || false,
+    allProductsSaleable: savedReversal?.input?.allProductsSaleable || false,
+  });
+  const [reversalOpen, setReversalOpen] = useState(false);
+  const [reversalReview, setReversalReview] = useState(false);
+  const [reversalError, setReversalError] = useState("");
   const [savedConfirmation] = useState(() => readPendingConfirmation(id));
   const pendingConfirmation = useRef(savedConfirmation);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -98,12 +141,25 @@ export default function SaleDetailPage() {
     queryFn: () => salesApi.get(id),
     retry: false,
   });
+  const reversalDocument = useQuery({
+    queryKey: ["sale-reversal", id],
+    queryFn: () => salesApi.getReversal(id),
+    enabled:
+      sale.data?.status === "cancelled" && Boolean(sale.data.confirmedAt),
+    retry: false,
+  });
   const canEdit =
     sale.data?.status === "draft" &&
     session.permissions.includes("sales.create") &&
     (session.user.role !== "seller" || sale.data.createdBy === session.user.id);
   const canCancel =
     sale.data?.status === "draft" &&
+    session.permissions.includes("sales.cancel");
+  const canReverse =
+    sale.data?.status === "confirmed" &&
+    sale.data.warehouseIsActive === true &&
+    session.warehouseIds?.includes(String(sale.data.warehouseId)) &&
+    session.user.role === "administrator" &&
     session.permissions.includes("sales.cancel");
   const canConfirm =
     sale.data?.status === "draft" &&
@@ -192,6 +248,54 @@ export default function SaleDetailPage() {
       }
     },
   });
+  const reverse = useMutation({
+    mutationFn: () => {
+      const body = {
+        expectedVersion: sale.data.version,
+        reason: reversalReason.trim(),
+        reference: reversalReference.trim(),
+        physicalObservation: reversalObservation.trim(),
+        ...declarations,
+      };
+      const fingerprint = JSON.stringify(body);
+      if (
+        !pendingReversal.current ||
+        pendingReversal.current.fingerprint !== fingerprint
+      ) {
+        pendingReversal.current = { key: makeKey(), fingerprint, input: body };
+        storePendingReversal(id, pendingReversal.current);
+      }
+      setReversalError("");
+      return salesApi.reverse(id, body, pendingReversal.current.key);
+    },
+    onSuccess: async ({ sale: updatedSale, reversal: document }) => {
+      pendingReversal.current = null;
+      storePendingReversal(id, null);
+      client.setQueryData(["sale", id], updatedSale);
+      client.setQueryData(["sale-reversal", id], document);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["sales"] }),
+        client.invalidateQueries({ queryKey: ["inventory"] }),
+        client.invalidateQueries({ queryKey: ["products", "balances"] }),
+        client.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+      setReversalOpen(false);
+      setReversalReview(false);
+      toast.success("Venta anulada y existencias reintegradas.");
+    },
+    onError: (error) => {
+      setReversalError(error.message || "No se pudo anular la venta.");
+      if (
+        error.status &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        error.status !== 408
+      ) {
+        pendingReversal.current = null;
+        storePendingReversal(id, null);
+      }
+    },
+  });
 
   if (sale.isPending)
     return (
@@ -228,7 +332,9 @@ export default function SaleDetailPage() {
             <span
               className={`purchase-status purchase-status--${document.status}`}
             >
-              {stateLabels[document.status]}
+              {document.status === "cancelled" && document.confirmedAt
+                ? "Anulada"
+                : stateLabels[document.status]}
             </span>
           </div>
           <p>Documento comercial · versión {document.version}</p>
@@ -322,6 +428,214 @@ export default function SaleDetailPage() {
               </Dialog.Portal>
             </Dialog.Root>
           ) : null}
+          {canReverse ? (
+            <Dialog.Root
+              open={reversalOpen}
+              onOpenChange={(open) => {
+                if (!reverse.isPending) setReversalOpen(open);
+                if (open) {
+                  setReversalReview(false);
+                  setReversalError("");
+                }
+              }}
+            >
+              <Dialog.Trigger asChild>
+                <Button
+                  variant="secondary"
+                  className="border-red-200 text-red-700 hover:bg-red-50"
+                >
+                  Anular venta
+                </Button>
+              </Dialog.Trigger>
+              <Dialog.Portal>
+                <Dialog.Overlay className="dialog-overlay" />
+                <Dialog.Content className="purchase-dialog sale-reversal-dialog">
+                  <Dialog.Title>Anular venta {document.number}</Dialog.Title>
+                  <Dialog.Description>
+                    Esta anulación es completa e irreversible. Solo procede si
+                    la mercancía nunca salió físicamente y sigue completa y apta
+                    en {document.warehouseName}.
+                  </Dialog.Description>
+                  {!reversalReview ? (
+                    <div className="sale-reversal-form">
+                      <label htmlFor="sale-reversal-reason">
+                        Motivo de anulación
+                      </label>
+                      <textarea
+                        id="sale-reversal-reason"
+                        rows={2}
+                        maxLength={500}
+                        value={reversalReason}
+                        onChange={(event) =>
+                          setReversalReason(event.target.value)
+                        }
+                      />
+                      <label htmlFor="sale-reversal-reference">
+                        Referencia de verificación física
+                      </label>
+                      <input
+                        id="sale-reversal-reference"
+                        maxLength={120}
+                        value={reversalReference}
+                        onChange={(event) =>
+                          setReversalReference(event.target.value)
+                        }
+                      />
+                      <label htmlFor="sale-reversal-observation">
+                        Observaciones de la comprobación
+                      </label>
+                      <textarea
+                        id="sale-reversal-observation"
+                        rows={3}
+                        maxLength={1000}
+                        value={reversalObservation}
+                        onChange={(event) =>
+                          setReversalObservation(event.target.value)
+                        }
+                      />
+                      <fieldset className="sale-reversal-declarations">
+                        <legend>Declaraciones del responsable</legend>
+                        {[
+                          [
+                            "neverDispatched",
+                            "Declaro que la mercancía nunca salió físicamente de la bodega",
+                          ],
+                          [
+                            "allQuantitiesPresent",
+                            "Declaro que todas las cantidades originales están completas",
+                          ],
+                          [
+                            "allProductsSaleable",
+                            "Declaro que todos los productos permanecen aptos para vender",
+                          ],
+                        ].map(([name, label]) => (
+                          <label key={name}>
+                            <input
+                              type="checkbox"
+                              checked={declarations[name]}
+                              onChange={(event) =>
+                                setDeclarations((current) => ({
+                                  ...current,
+                                  [name]: event.target.checked,
+                                }))
+                              }
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </fieldset>
+                      <p className="sale-neutral-banner" role="note">
+                        Estas declaraciones quedan registradas a tu nombre.
+                        SIGECOM no comprueba automáticamente el estado físico ni
+                        el despacho de la mercancía.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="sale-reversal-review">
+                      <p className="sale-reversal-warning" role="alert">
+                        Al confirmar se reintegrarán todas las cantidades de
+                        esta venta en {document.warehouseName}. No continúes si
+                        la mercancía salió o no está físicamente completa y
+                        apta.
+                      </p>
+                      <div className="purchase-table-wrap">
+                        <table className="purchase-products-table">
+                          <caption className="sr-only">
+                            Cantidades que se reintegrarán al inventario
+                          </caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">Producto</th>
+                              <th scope="col">Cantidad a reintegrar</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {document.lines.map((line) => (
+                              <tr key={line.id}>
+                                <td data-label="Producto">
+                                  {line.name} ({line.sku})
+                                </td>
+                                <td data-label="Cantidad a reintegrar">
+                                  {line.quantity.toLocaleString("es-CO")}{" "}
+                                  {line.unit}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>Motivo</dt>
+                          <dd>{reversalReason.trim()}</dd>
+                        </div>
+                        <div>
+                          <dt>Referencia física</dt>
+                          <dd>{reversalReference.trim()}</dd>
+                        </div>
+                        <div>
+                          <dt>Observaciones</dt>
+                          <dd>{reversalObservation.trim()}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )}
+                  {reversalError ? (
+                    <div className="purchase-state--error" role="alert">
+                      {reversalError}
+                      {!reverse.isPending &&
+                      (!reverse.error?.status ||
+                        reverse.error.status === 408 ||
+                        reverse.error.status >= 500) ? (
+                        <p>
+                          El resultado puede ser incierto. Reintenta la misma
+                          solicitud; el sistema conservará la clave para evitar
+                          un segundo reintegro.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="purchase-dialog-actions">
+                    <Button
+                      variant="secondary"
+                      disabled={reverse.isPending}
+                      onClick={() =>
+                        reversalReview
+                          ? setReversalReview(false)
+                          : setReversalOpen(false)
+                      }
+                    >
+                      {reversalReview ? "Volver a la evidencia" : "Cancelar"}
+                    </Button>
+                    {!reversalReview ? (
+                      <Button
+                        disabled={
+                          reversalReason.trim().length < 3 ||
+                          !reversalReference.trim() ||
+                          reversalObservation.trim().length < 3 ||
+                          !Object.values(declarations).every(Boolean)
+                        }
+                        onClick={() => setReversalReview(true)}
+                      >
+                        Revisar anulación
+                      </Button>
+                    ) : (
+                      <Button
+                        disabled={reverse.isPending}
+                        onClick={() => reverse.mutate()}
+                      >
+                        {reverse.isPending
+                          ? "Anulando…"
+                          : reversalError
+                            ? "Reintentar anulación"
+                            : "Anular y reintegrar existencias"}
+                      </Button>
+                    )}
+                  </div>
+                </Dialog.Content>
+              </Dialog.Portal>
+            </Dialog.Root>
+          ) : null}
           {canEdit ? (
             <Button asChild variant="secondary">
               <Link to={`/ventas/${id}/editar`}>
@@ -393,6 +707,78 @@ export default function SaleDetailPage() {
             existencias.
           </p>
         </div>
+      ) : null}
+      {document.status === "cancelled" && document.confirmedAt ? (
+        <section
+          className="purchase-form-section sale-reversal-record"
+          aria-labelledby="sale-reversal-record-heading"
+        >
+          <div className="purchase-section-heading">
+            <div>
+              <h2 id="sale-reversal-record-heading">Anulación de la venta</h2>
+              <p>
+                La venta original permanece en el historial; se registró un
+                movimiento compensatorio.
+              </p>
+            </div>
+            {reversalDocument.data ? (
+              <a
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
+                href={salesApi.reversalPdfUrl(id)}
+                download
+              >
+                <DownloadSimple size={17} aria-hidden="true" />
+                Descargar comprobante PDF
+              </a>
+            ) : null}
+          </div>
+          {reversalDocument.isPending ? (
+            <p role="status">Cargando documento de anulación…</p>
+          ) : reversalDocument.isError ? (
+            <p className="purchase-state--error" role="alert">
+              No se pudo cargar el documento compensatorio:{" "}
+              {reversalDocument.error.message}
+            </p>
+          ) : reversalDocument.data ? (
+            <dl className="sale-reversal-record-grid">
+              <div>
+                <dt>Responsable</dt>
+                <dd>{reversalDocument.data.cancelledByName}</dd>
+              </div>
+              <div>
+                <dt>Fecha y hora</dt>
+                <dd>
+                  {dateTimeFormat.format(
+                    new Date(reversalDocument.data.cancelledAt),
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Motivo</dt>
+                <dd>{reversalDocument.data.reason}</dd>
+              </div>
+              <div>
+                <dt>Referencia de verificación</dt>
+                <dd>{reversalDocument.data.verificationReference}</dd>
+              </div>
+              <div>
+                <dt>Observaciones</dt>
+                <dd>{reversalDocument.data.physicalObservation}</dd>
+              </div>
+              <div>
+                <dt>Movimiento de Inventario</dt>
+                <dd>
+                  Anulación de venta · operación #
+                  {reversalDocument.data.sourceOperationId}
+                </dd>
+              </div>
+              <div className="sale-reversal-disclaimer">
+                Las declaraciones físicas fueron realizadas por el responsable;
+                SIGECOM no verificó automáticamente la mercancía.
+              </div>
+            </dl>
+          ) : null}
+        </section>
       ) : null}
       <section
         className="purchase-detail-layout"

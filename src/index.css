@@ -3964,6 +3964,128 @@ p {
   justify-content: flex-end;
   gap: 8px;
 }
+.sale-reversal-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 24px);
+}
+.sale-reversal-form {
+  display: grid;
+  gap: 8px;
+}
+.sale-reversal-form > label {
+  margin-top: 5px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
+}
+.sale-reversal-form > input,
+.sale-reversal-form > textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: #172033;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+.sale-reversal-form > input:focus-visible,
+.sale-reversal-form > textarea:focus-visible,
+.sale-reversal-declarations input:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.sale-reversal-declarations {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  padding: 12px;
+}
+.sale-reversal-declarations legend {
+  padding-inline: 4px;
+  color: #172033;
+  font-size: 12px;
+  font-weight: 700;
+}
+.sale-reversal-declarations label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sale-reversal-declarations input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: #1f3a8a;
+}
+.sale-reversal-form .sale-neutral-banner {
+  margin: 5px 0 0;
+}
+.sale-reversal-review {
+  display: grid;
+  gap: 12px;
+  max-height: min(48vh, 390px);
+  overflow-y: auto;
+}
+.sale-reversal-warning {
+  margin: 0 !important;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: #991b1b !important;
+  background: #fff7f7;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sale-reversal-review .purchase-table-wrap {
+  padding: 0;
+}
+.sale-reversal-review dl,
+.sale-reversal-record-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.sale-reversal-review dl > div,
+.sale-reversal-record-grid > div {
+  min-width: 0;
+}
+.sale-reversal-review dt,
+.sale-reversal-record-grid dt {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
+}
+.sale-reversal-review dd,
+.sale-reversal-record-grid dd {
+  margin: 3px 0 0;
+  color: #172033;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.sale-reversal-record {
+  display: grid;
+  gap: 14px;
+}
+.sale-reversal-record-grid {
+  gap: 16px 24px;
+}
+.sale-reversal-disclaimer {
+  grid-column: 1 / -1;
+  border-left: 3px solid #2563eb;
+  padding: 5px 10px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .sale-confirm-review {
   display: grid;
   gap: 8px;
@@ -4042,6 +4164,14 @@ p {
   }
   .purchase-table-wrap {
     padding-inline: 10px;
+  }
+  .sale-reversal-record .purchase-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .sale-reversal-record-grid,
+  .sale-reversal-review dl {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 430px) {

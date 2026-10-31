@@ -433,7 +433,7 @@ describe("salesApi", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses only authorized draft document routes with CSRF and idempotency keys", async () => {
+  it("uses separate draft and confirmed-sale reversal routes with CSRF and idempotency", async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(Response.json({ csrfToken: "s".repeat(64) }))
@@ -442,7 +442,11 @@ describe("salesApi", () => {
       .mockResolvedValueOnce(Response.json({ id: "4" }))
       .mockResolvedValueOnce(Response.json({ id: "4" }))
       .mockResolvedValueOnce(Response.json({ id: "4" }))
-      .mockResolvedValueOnce(Response.json({ id: "4" }));
+      .mockResolvedValueOnce(Response.json({ id: "4" }))
+      .mockResolvedValueOnce(
+        Response.json({ sale: { id: "4" }, reversal: { id: "9" } }),
+      )
+      .mockResolvedValueOnce(Response.json({ id: "9" }));
     vi.stubGlobal("fetch", fetch);
 
     await authApi.refreshCsrf();
@@ -456,6 +460,18 @@ describe("salesApi", () => {
       "sale-cancel-key",
     );
     await salesApi.confirm("4", { expectedVersion: 2 }, "sale-confirm-key");
+    const reversalInput = {
+      expectedVersion: 3,
+      reason: "No salió",
+      reference: "ACTA-4",
+      physicalObservation: "Conteo físico.",
+      neverDispatched: true,
+      allQuantitiesPresent: true,
+      allProductsSaleable: true,
+    };
+    await salesApi.reverse("4", reversalInput, "sale-reversal-key");
+    await salesApi.getReversal("4");
+    expect(salesApi.reversalPdfUrl("4")).toBe("/api/v1/sales/4/reversal/pdf");
 
     expect(fetch).toHaveBeenNthCalledWith(
       2,
@@ -497,6 +513,23 @@ describe("salesApi", () => {
           "Idempotency-Key": "sale-confirm-key",
         }),
       }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      8,
+      "/api/v1/sales/4/reversal",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(reversalInput),
+        headers: expect.objectContaining({
+          "X-CSRF-Token": "s".repeat(64),
+          "Idempotency-Key": "sale-reversal-key",
+        }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      9,
+      "/api/v1/sales/4/reversal",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 });
