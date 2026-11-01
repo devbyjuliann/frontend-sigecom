@@ -389,6 +389,22 @@ export const salesApi = {
   reversalPdfUrl(id) {
     return `/api/v1/sales/${encodeURIComponent(id)}/reversal/pdf`;
   },
+  returns(id) {
+    return get(`/api/v1/sales/${encodeURIComponent(id)}/returns`);
+  },
+  returnDocument(saleId, returnId) {
+    return get(
+      `/api/v1/sales/${encodeURIComponent(saleId)}/returns/${encodeURIComponent(returnId)}`,
+    );
+  },
+  createReturn(id, input, idempotencyKey) {
+    return post(`/api/v1/sales/${encodeURIComponent(id)}/returns`, input, {
+      idempotencyKey,
+    });
+  },
+  returnPdfUrl(saleId, returnId) {
+    return `/api/v1/sales/${encodeURIComponent(saleId)}/returns/${encodeURIComponent(returnId)}/pdf`;
+  },
 };
 
 export const dashboardApi = {

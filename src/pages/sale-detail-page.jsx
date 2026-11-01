@@ -4,6 +4,7 @@ import { ArrowLeft } from "@phosphor-icons/react/ArrowLeft";
 import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { Warning } from "@phosphor-icons/react/Warning";
 import { DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
+import { ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -105,6 +106,30 @@ function storePendingReversal(id, value) {
   }
 }
 
+function customerReturnStorageKey(id) {
+  return `sigecom.customer-return.pending.${id}`;
+}
+function readPendingCustomerReturn(id) {
+  try {
+    const value = sessionStorage.getItem(customerReturnStorageKey(id));
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+function storePendingCustomerReturn(id, value) {
+  try {
+    if (value)
+      sessionStorage.setItem(
+        customerReturnStorageKey(id),
+        JSON.stringify(value),
+      );
+    else sessionStorage.removeItem(customerReturnStorageKey(id));
+  } catch {
+    /* Keep the request in memory if browser storage is unavailable. */
+  }
+}
+
 export default function SaleDetailPage() {
   const { id } = useParams();
   const { session } = useAuth();
@@ -113,6 +138,27 @@ export default function SaleDetailPage() {
   const pendingCancellation = useRef(savedCancellation);
   const [savedReversal] = useState(() => readPendingReversal(id));
   const pendingReversal = useRef(savedReversal);
+  const [savedCustomerReturn] = useState(() => readPendingCustomerReturn(id));
+  const pendingCustomerReturn = useRef(savedCustomerReturn);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnReview, setReturnReview] = useState(false);
+  const [returnReference, setReturnReference] = useState(
+    () => savedCustomerReturn?.input?.reference || "",
+  );
+  const [returnReason, setReturnReason] = useState(
+    () => savedCustomerReturn?.input?.reason || "",
+  );
+  const [returnObservation, setReturnObservation] = useState(
+    () => savedCustomerReturn?.input?.physicalObservation || "",
+  );
+  const [returnDeclarations, setReturnDeclarations] = useState({
+    receivedPhysical: savedCustomerReturn?.input?.receivedPhysical || false,
+    inspected: savedCustomerReturn?.input?.inspected || false,
+  });
+  const [returnLines, setReturnLines] = useState(
+    () => savedCustomerReturn?.lines || {},
+  );
+  const [returnError, setReturnError] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState(() => savedCancellation?.reason || "");
   const [reversalReason, setReversalReason] = useState(
@@ -148,6 +194,12 @@ export default function SaleDetailPage() {
       sale.data?.status === "cancelled" && Boolean(sale.data.confirmedAt),
     retry: false,
   });
+  const customerReturns = useQuery({
+    queryKey: ["sale-returns", id],
+    queryFn: () => salesApi.returns(id),
+    enabled: sale.data?.status === "confirmed",
+    retry: false,
+  });
   const canEdit =
     sale.data?.status === "draft" &&
     session.permissions.includes("sales.create") &&
@@ -161,6 +213,12 @@ export default function SaleDetailPage() {
     session.warehouseIds?.includes(String(sale.data.warehouseId)) &&
     session.user.role === "administrator" &&
     session.permissions.includes("sales.cancel");
+  const canReturn =
+    sale.data?.status === "confirmed" &&
+    sale.data.warehouseIsActive === true &&
+    session.warehouseIds?.includes(String(sale.data.warehouseId)) &&
+    session.user.role === "administrator" &&
+    session.permissions.includes("sales.return");
   const canConfirm =
     sale.data?.status === "draft" &&
     session.permissions.includes("sales.confirm") &&
@@ -296,6 +354,80 @@ export default function SaleDetailPage() {
       }
     },
   });
+  const returnCustomerGoods = useMutation({
+    mutationFn: () => {
+      const lines = document.lines
+        .filter((line) => Number(returnLines[line.id]?.quantityReceived) > 0)
+        .map((line) => ({
+          saleLineId: line.id,
+          quantityReceived: Number(returnLines[line.id].quantityReceived),
+          quantityRestocked: Number(
+            returnLines[line.id].quantityRestocked || 0,
+          ),
+          nonRestockReason: String(
+            returnLines[line.id].nonRestockReason || "",
+          ).trim(),
+        }));
+      let body = {
+        expectedVersion: document.version,
+        reference: returnReference.trim(),
+        reason: returnReason.trim(),
+        physicalObservation: returnObservation.trim(),
+        ...returnDeclarations,
+        lines,
+      };
+      const pending = pendingCustomerReturn.current;
+      const replayBody = pending?.input
+        ? { ...body, expectedVersion: pending.input.expectedVersion }
+        : null;
+      if (
+        pending &&
+        JSON.stringify(replayBody) === JSON.stringify(pending.input)
+      ) {
+        body = pending.input;
+      } else {
+        const fingerprint = JSON.stringify(body);
+        pendingCustomerReturn.current = {
+          key: makeKey(),
+          fingerprint,
+          input: body,
+          lines: returnLines,
+        };
+        storePendingCustomerReturn(id, pendingCustomerReturn.current);
+      }
+      setReturnError("");
+      return salesApi.createReturn(id, body, pendingCustomerReturn.current.key);
+    },
+    onSuccess: async ({
+      sale: updated,
+      customerReturn: customerReturnDocument,
+    }) => {
+      pendingCustomerReturn.current = null;
+      storePendingCustomerReturn(id, null);
+      client.setQueryData(["sale", id], updated);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["sale-returns", id] }),
+        client.invalidateQueries({ queryKey: ["sales"] }),
+        client.invalidateQueries({ queryKey: ["inventory"] }),
+        client.invalidateQueries({ queryKey: ["products", "balances"] }),
+        client.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+      setReturnOpen(false);
+      setReturnReview(false);
+      toast.success(
+        customerReturnDocument.sourceOperationId
+          ? "Devolución confirmada y existencias aptas reintegradas."
+          : "Devolución confirmada sin cambios en Inventario.",
+      );
+    },
+    onError: (error) => {
+      setReturnError(error.message || "No se pudo registrar la devolución.");
+      if (error.status >= 400 && error.status < 500 && error.status !== 408) {
+        pendingCustomerReturn.current = null;
+        storePendingCustomerReturn(id, null);
+      }
+    },
+  });
 
   if (sale.isPending)
     return (
@@ -318,6 +450,9 @@ export default function SaleDetailPage() {
       </section>
     );
   const document = sale.data;
+  const hasEligibleReturnLine = document.lines.some(
+    (line) => (line.returnableQuantity ?? line.quantity) > 0,
+  );
 
   return (
     <section className="page-section purchase-page">
@@ -636,6 +771,501 @@ export default function SaleDetailPage() {
               </Dialog.Portal>
             </Dialog.Root>
           ) : null}
+          {canReturn ? (
+            <Dialog.Root
+              open={returnOpen}
+              onOpenChange={(open) => {
+                if (!returnCustomerGoods.isPending) setReturnOpen(open);
+                if (open) {
+                  setReturnReview(false);
+                  setReturnError("");
+                }
+              }}
+            >
+              <Dialog.Trigger asChild>
+                <Button variant="secondary">
+                  <ArrowCounterClockwise size={17} aria-hidden="true" />{" "}
+                  Registrar devolución
+                </Button>
+              </Dialog.Trigger>
+              <Dialog.Portal>
+                <Dialog.Overlay className="dialog-overlay" />
+                <Dialog.Content className="purchase-dialog sale-return-dialog">
+                  <Dialog.Title>Devolución de {document.number}</Dialog.Title>
+                  <Dialog.Description>
+                    Registra solo mercancía recibida físicamente. El reintegro a
+                    Inventario incluye exclusivamente las unidades aptas.
+                  </Dialog.Description>
+                  {!returnReview ? (
+                    <div className="sale-reversal-form">
+                      <label htmlFor="customer-return-reference">
+                        Referencia
+                      </label>
+                      <input
+                        id="customer-return-reference"
+                        maxLength={120}
+                        value={returnReference}
+                        onChange={(event) =>
+                          setReturnReference(event.target.value)
+                        }
+                      />
+                      <label htmlFor="customer-return-reason">
+                        Motivo comercial
+                      </label>
+                      <textarea
+                        id="customer-return-reason"
+                        rows={2}
+                        maxLength={500}
+                        value={returnReason}
+                        onChange={(event) =>
+                          setReturnReason(event.target.value)
+                        }
+                      />
+                      <label htmlFor="customer-return-observation">
+                        Observación de recepción e inspección
+                      </label>
+                      <textarea
+                        id="customer-return-observation"
+                        rows={3}
+                        maxLength={1000}
+                        value={returnObservation}
+                        onChange={(event) =>
+                          setReturnObservation(event.target.value)
+                        }
+                      />
+                      <section
+                        className="sale-return-products"
+                        aria-label="Productos y cantidades de devolución"
+                      >
+                        {hasEligibleReturnLine ? null : (
+                          <p className="sale-return-empty" role="status">
+                            No hay productos con cantidades pendientes de
+                            devolución.
+                          </p>
+                        )}
+                        {document.lines.map((line) => {
+                          const value = returnLines[line.id] || {};
+                          const pending =
+                            line.returnableQuantity ?? line.quantity;
+                          const returned = line.returnedQuantity || 0;
+                          const received = Number(value.quantityReceived || 0);
+                          const restocked = Number(
+                            value.quantityRestocked || 0,
+                          );
+                          const notRestocked =
+                            value.selected &&
+                            Number.isInteger(received) &&
+                            Number.isInteger(restocked) &&
+                            received >= restocked
+                              ? received - restocked
+                              : 0;
+                          const cardId = `sale-return-product-${line.id}`;
+                          return (
+                            <article
+                              className={`sale-return-product-card${pending === 0 ? " is-complete" : ""}`}
+                              key={line.id}
+                              aria-labelledby={`${cardId}-name`}
+                            >
+                              <header className="sale-return-product-header">
+                                {pending > 0 ? (
+                                  <label className="sale-return-product-toggle">
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`Seleccionar ${line.name} para devolución`}
+                                      checked={Boolean(value.selected)}
+                                      onChange={(event) =>
+                                        setReturnLines((current) => ({
+                                          ...current,
+                                          [line.id]: {
+                                            ...current[line.id],
+                                            selected: event.target.checked,
+                                            quantityReceived: event.target
+                                              .checked
+                                              ? current[line.id]
+                                                  ?.quantityReceived || "1"
+                                              : "0",
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    <span>Incluir en esta devolución</span>
+                                  </label>
+                                ) : (
+                                  <p className="sale-return-complete-status">
+                                    Todas las unidades de este producto ya
+                                    fueron devueltas.
+                                  </p>
+                                )}
+                                <div className="sale-return-product-identity">
+                                  <h3 id={`${cardId}-name`}>{line.name}</h3>
+                                  <span className="sale-return-sku">
+                                    SKU <strong>{line.sku}</strong>
+                                  </span>
+                                  <span className="sale-return-unit">
+                                    Unidad: <strong>{line.unit}</strong>
+                                  </span>
+                                </div>
+                              </header>
+
+                              <dl
+                                className="sale-return-quantity-summary"
+                                aria-label={`Cantidades históricas de ${line.name}`}
+                              >
+                                <div data-summary="sold">
+                                  <dt>Vendidas originalmente</dt>
+                                  <dd>
+                                    <strong>
+                                      {line.quantity.toLocaleString("es-CO")}
+                                    </strong>
+                                    <span>{line.unit}</span>
+                                  </dd>
+                                </div>
+                                <div data-summary="returned">
+                                  <dt>Devueltas anteriormente</dt>
+                                  <dd>
+                                    <strong>
+                                      {returned.toLocaleString("es-CO")}
+                                    </strong>
+                                    <span>{line.unit}</span>
+                                  </dd>
+                                </div>
+                                <div data-summary="pending">
+                                  <dt>Pendientes de devolución</dt>
+                                  <dd>
+                                    <strong>
+                                      {pending.toLocaleString("es-CO")}
+                                    </strong>
+                                    <span>{line.unit}</span>
+                                  </dd>
+                                </div>
+                              </dl>
+
+                              {pending > 0 ? (
+                                <fieldset
+                                  className="sale-return-product-controls"
+                                  disabled={!value.selected}
+                                  aria-label={`Cantidades de devolución para ${line.name}`}
+                                >
+                                  <legend>Devolución de este producto</legend>
+                                  <label>
+                                    Cantidad recibida ahora
+                                    <input
+                                      aria-label={`Cantidad recibida ahora: ${line.name}`}
+                                      type="number"
+                                      min="1"
+                                      max={pending}
+                                      step="1"
+                                      aria-describedby={`${cardId}-received-help`}
+                                      value={
+                                        value.selected
+                                          ? (value.quantityReceived ?? "1")
+                                          : ""
+                                      }
+                                      aria-invalid={
+                                        value.selected &&
+                                        (!Number.isInteger(received) ||
+                                          received < 1 ||
+                                          received > pending)
+                                      }
+                                      onChange={(event) =>
+                                        setReturnLines((current) => ({
+                                          ...current,
+                                          [line.id]: {
+                                            ...current[line.id],
+                                            quantityReceived:
+                                              event.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    <small id={`${cardId}-received-help`}>
+                                      {value.selected &&
+                                      (!Number.isInteger(received) ||
+                                        received < 1 ||
+                                        received > pending)
+                                        ? `Ingresa un entero entre 1 y ${pending}.`
+                                        : `Máximo disponible: ${pending} ${line.unit}.`}
+                                    </small>
+                                  </label>
+                                  <label>
+                                    Cantidad apta para reintegrar
+                                    <input
+                                      aria-label={`Cantidad apta para reintegrar: ${line.name}`}
+                                      type="number"
+                                      min="0"
+                                      max={received}
+                                      step="1"
+                                      aria-describedby={`${cardId}-restocked-help`}
+                                      value={
+                                        value.selected
+                                          ? (value.quantityRestocked ?? "0")
+                                          : ""
+                                      }
+                                      aria-invalid={
+                                        value.selected &&
+                                        (!Number.isInteger(restocked) ||
+                                          restocked < 0 ||
+                                          restocked > received ||
+                                          restocked > pending)
+                                      }
+                                      onChange={(event) =>
+                                        setReturnLines((current) => ({
+                                          ...current,
+                                          [line.id]: {
+                                            ...current[line.id],
+                                            quantityRestocked:
+                                              event.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    <small id={`${cardId}-restocked-help`}>
+                                      {value.selected &&
+                                      (!Number.isInteger(restocked) ||
+                                        restocked < 0 ||
+                                        restocked > received)
+                                        ? `Ingresa un entero entre 0 y ${received}.`
+                                        : "No puede superar la cantidad recibida."}
+                                    </small>
+                                  </label>
+                                  <div className="sale-return-not-restocked">
+                                    <span>
+                                      Cantidad no apta para reintegrar
+                                    </span>
+                                    <output
+                                      aria-label={`Cantidad no apta para reintegrar: ${line.name}`}
+                                      aria-live="polite"
+                                      data-review="not-restocked"
+                                      data-product={line.name}
+                                    >
+                                      {notRestocked.toLocaleString("es-CO")}{" "}
+                                      {line.unit}
+                                    </output>
+                                    <small>
+                                      Se calcula con lo recibido menos lo apto.
+                                    </small>
+                                  </div>
+                                  {value.selected && notRestocked > 0 ? (
+                                    <label className="sale-return-reason">
+                                      Motivo de no reintegro
+                                      <input
+                                        aria-label={`Motivo de no reintegro: ${line.name}`}
+                                        aria-required="true"
+                                        aria-describedby={`${cardId}-reason-help`}
+                                        aria-invalid={
+                                          !value.nonRestockReason?.trim()
+                                        }
+                                        maxLength={500}
+                                        value={value.nonRestockReason || ""}
+                                        onChange={(event) =>
+                                          setReturnLines((current) => ({
+                                            ...current,
+                                            [line.id]: {
+                                              ...current[line.id],
+                                              nonRestockReason:
+                                                event.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                      <small id={`${cardId}-reason-help`}>
+                                        Obligatorio cuando hay unidades no
+                                        aptas.
+                                      </small>
+                                    </label>
+                                  ) : null}
+                                </fieldset>
+                              ) : null}
+                            </article>
+                          );
+                        })}
+                      </section>
+                      <fieldset className="sale-reversal-declarations">
+                        <legend>Declaraciones obligatorias</legend>
+                        {[
+                          [
+                            "receivedPhysical",
+                            "Declaro que recibí físicamente las cantidades indicadas",
+                          ],
+                          [
+                            "inspected",
+                            "Declaro que inspeccioné la mercancía y clasifiqué su aptitud",
+                          ],
+                        ].map(([name, label]) => (
+                          <label key={name}>
+                            <input
+                              type="checkbox"
+                              checked={returnDeclarations[name]}
+                              onChange={(event) =>
+                                setReturnDeclarations((current) => ({
+                                  ...current,
+                                  [name]: event.target.checked,
+                                }))
+                              }
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </fieldset>
+                    </div>
+                  ) : (
+                    <div className="sale-reversal-review">
+                      <p className="sale-neutral-banner">
+                        Venta original: {document.number} · Bodega:{" "}
+                        {document.warehouseName}. La venta seguirá confirmada.
+                      </p>
+                      <section
+                        className="sale-return-review-products"
+                        aria-label="Resumen de productos seleccionados"
+                      >
+                        {document.lines
+                          .filter((line) => returnLines[line.id]?.selected)
+                          .map((line) => {
+                            const value = returnLines[line.id];
+                            const received = Number(value.quantityReceived);
+                            const restocked = Number(
+                              value.quantityRestocked || 0,
+                            );
+                            const notRestocked = received - restocked;
+                            return (
+                              <article
+                                className="sale-return-review-card"
+                                key={line.id}
+                              >
+                                <header>
+                                  <h3>{line.name}</h3>
+                                  <span>SKU {line.sku}</span>
+                                  <span>Unidad: {line.unit}</span>
+                                </header>
+                                <dl>
+                                  <div>
+                                    <dt>Vendidas originalmente</dt>
+                                    <dd>
+                                      {line.quantity.toLocaleString("es-CO")}{" "}
+                                      {line.unit}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt>Recibidas ahora</dt>
+                                    <dd>
+                                      {received.toLocaleString("es-CO")}{" "}
+                                      {line.unit}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt>Aptas para reintegrar</dt>
+                                    <dd>
+                                      {restocked.toLocaleString("es-CO")}{" "}
+                                      {line.unit}
+                                    </dd>
+                                  </div>
+                                  <div
+                                    data-review="not-restocked"
+                                    data-product={line.name}
+                                  >
+                                    <dt>No aptas para reintegrar</dt>
+                                    <dd>
+                                      {notRestocked.toLocaleString("es-CO")}{" "}
+                                      {line.unit}
+                                      {notRestocked > 0 ? (
+                                        <span className="sale-return-review-reason">
+                                          Motivo: {value.nonRestockReason}
+                                        </span>
+                                      ) : null}
+                                    </dd>
+                                  </div>
+                                </dl>
+                              </article>
+                            );
+                          })}
+                      </section>
+                      <p>
+                        <strong>Referencia:</strong> {returnReference.trim()}
+                      </p>
+                      <p>
+                        <strong>Motivo:</strong> {returnReason.trim()}
+                      </p>
+                      <p>
+                        <strong>Observación:</strong> {returnObservation.trim()}
+                      </p>
+                    </div>
+                  )}
+                  {returnError ? (
+                    <div className="purchase-state--error" role="alert">
+                      {returnError}
+                      {!returnCustomerGoods.isPending &&
+                      (!returnCustomerGoods.error?.status ||
+                        returnCustomerGoods.error.status === 408 ||
+                        returnCustomerGoods.error.status >= 500) ? (
+                        <p>
+                          El resultado puede ser incierto. Reintenta con la
+                          misma clave para recuperar el documento sin duplicar
+                          el reintegro.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="purchase-dialog-actions">
+                    <Button
+                      variant="secondary"
+                      disabled={returnCustomerGoods.isPending}
+                      onClick={() =>
+                        returnReview
+                          ? setReturnReview(false)
+                          : setReturnOpen(false)
+                      }
+                    >
+                      {returnReview ? "Volver al formulario" : "Cancelar"}
+                    </Button>
+                    {!returnReview ? (
+                      <Button
+                        disabled={
+                          !hasEligibleReturnLine ||
+                          returnReference.trim().length < 1 ||
+                          returnReason.trim().length < 1 ||
+                          returnObservation.trim().length < 3 ||
+                          !Object.values(returnDeclarations).every(Boolean) ||
+                          !document.lines.some((line) => {
+                            const value = returnLines[line.id] || {};
+                            const received = Number(value.quantityReceived);
+                            const restocked = Number(
+                              value.quantityRestocked || 0,
+                            );
+                            return (
+                              value.selected &&
+                              Number.isInteger(received) &&
+                              received > 0 &&
+                              received <=
+                                (line.returnableQuantity ?? line.quantity) &&
+                              Number.isInteger(restocked) &&
+                              restocked >= 0 &&
+                              restocked <= received &&
+                              (restocked === received ||
+                                value.nonRestockReason?.trim())
+                            );
+                          })
+                        }
+                        onClick={() => setReturnReview(true)}
+                      >
+                        Revisar devolución
+                      </Button>
+                    ) : (
+                      <Button
+                        disabled={returnCustomerGoods.isPending}
+                        onClick={() => returnCustomerGoods.mutate()}
+                      >
+                        {returnCustomerGoods.isPending
+                          ? "Confirmando…"
+                          : returnError
+                            ? "Reintentar devolución"
+                            : "Confirmar devolución definitiva"}
+                      </Button>
+                    )}
+                  </div>
+                </Dialog.Content>
+              </Dialog.Portal>
+            </Dialog.Root>
+          ) : null}
           {canEdit ? (
             <Button asChild variant="secondary">
               <Link to={`/ventas/${id}/editar`}>
@@ -778,6 +1408,106 @@ export default function SaleDetailPage() {
               </div>
             </dl>
           ) : null}
+        </section>
+      ) : null}
+      {document.status === "confirmed" ? (
+        <section
+          className="purchase-form-section sale-customer-returns"
+          aria-labelledby="customer-return-history-heading"
+        >
+          <div className="purchase-section-heading">
+            <div>
+              <h2 id="customer-return-history-heading">
+                Devoluciones de la venta
+              </h2>
+              <p>
+                La venta conserva su estado confirmado; las cantidades se
+                derivan de los documentos definitivos.
+              </p>
+            </div>
+          </div>
+          <div className="purchase-table-wrap">
+            {customerReturns.isPending ? (
+              <p role="status">Cargando historial de devoluciones…</p>
+            ) : customerReturns.isError ? (
+              <p role="alert" className="purchase-state--error">
+                No se pudo cargar el historial: {customerReturns.error.message}
+              </p>
+            ) : customerReturns.data.items.length === 0 ? (
+              <p className="purchase-state">
+                Esta venta no tiene devoluciones registradas.
+              </p>
+            ) : (
+              customerReturns.data.items.map((item) => (
+                <article className="sale-return-record" key={item.id}>
+                  <div className="purchase-section-heading">
+                    <div>
+                      <h3>
+                        {item.number} · {item.reference}
+                      </h3>
+                      <p>
+                        {item.reason} · {item.returnedByName} ·{" "}
+                        {dateTimeFormat.format(new Date(item.returnedAt))}
+                      </p>
+                    </div>
+                    <a
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                      href={salesApi.returnPdfUrl(id, item.id)}
+                      download
+                    >
+                      <DownloadSimple size={17} aria-hidden="true" />
+                      Comprobante PDF
+                    </a>
+                  </div>
+                  <p>{item.physicalObservation}</p>
+                  <div className="purchase-table-wrap">
+                    <table className="purchase-products-table">
+                      <thead>
+                        <tr>
+                          <th>Producto / unidad</th>
+                          <th>Vendidas</th>
+                          <th>Recibidas</th>
+                          <th>Reintegradas</th>
+                          <th>No aptas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {item.lines.map((line) => (
+                          <tr key={line.id}>
+                            <td data-label="Producto">
+                              {line.name} · {line.unit}
+                            </td>
+                            <td data-label="Vendidas">
+                              {line.soldQuantity.toLocaleString("es-CO")}
+                            </td>
+                            <td data-label="Recibidas">
+                              {line.quantityReceived.toLocaleString("es-CO")}
+                            </td>
+                            <td data-label="Reintegradas">
+                              {line.quantityRestocked.toLocaleString("es-CO")}
+                            </td>
+                            <td data-label="No aptas">
+                              {line.quantityNotRestocked.toLocaleString(
+                                "es-CO",
+                              )}
+                              {line.nonRestockReason
+                                ? ` · ${line.nonRestockReason}`
+                                : ""}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <small>
+                    {item.sourceOperationId
+                      ? `Movimiento customer_return #${item.sourceOperationId}`
+                      : "Sin movimiento de inventario: ninguna unidad fue apta para reintegro."}
+                  </small>
+                </article>
+              ))
+            )}
+          </div>
         </section>
       ) : null}
       <section

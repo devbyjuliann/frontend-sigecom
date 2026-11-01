@@ -532,6 +532,56 @@ describe("salesApi", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+
+  it("posts and reads customer returns through the sale-scoped routes", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken: "r".repeat(64) }))
+      .mockResolvedValueOnce(Response.json({ saleId: "4", items: [] }))
+      .mockResolvedValueOnce(Response.json({ id: "17" }))
+      .mockResolvedValueOnce(Response.json({ id: "17" }));
+    vi.stubGlobal("fetch", fetch);
+    await authApi.refreshCsrf();
+    await salesApi.returns("4");
+    const input = {
+      expectedVersion: 8,
+      reference: "DEV-17",
+      reason: "Recepción e inspección",
+      physicalObservation: "Conteo cotejado.",
+      receivedPhysical: true,
+      inspected: true,
+      lines: [
+        {
+          saleLineId: "9",
+          quantityReceived: 2,
+          quantityRestocked: 1,
+          nonRestockReason: "Empaque abierto",
+        },
+      ],
+    };
+    await salesApi.createReturn("4", input, "customer-return-key");
+    await salesApi.returnDocument("4", "17");
+    expect(salesApi.returnPdfUrl("4", "17")).toBe(
+      "/api/v1/sales/4/returns/17/pdf",
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/sales/4/returns",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(input),
+        headers: expect.objectContaining({
+          "X-CSRF-Token": "r".repeat(64),
+          "Idempotency-Key": "customer-return-key",
+        }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/sales/4/returns/17",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
 });
 
 describe("purchasesApi", () => {

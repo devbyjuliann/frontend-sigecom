@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -21,6 +22,11 @@ vi.mock("../lib/auth-api.js", () => ({
     reverse: vi.fn(),
     getReversal: vi.fn(),
     reversalPdfUrl: vi.fn((id) => `/api/v1/sales/${id}/reversal/pdf`),
+    returns: vi.fn(),
+    createReturn: vi.fn(),
+    returnPdfUrl: vi.fn(
+      (saleId, returnId) => `/api/v1/sales/${saleId}/returns/${returnId}/pdf`,
+    ),
   },
 }));
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
@@ -60,7 +66,7 @@ function renderDetail(
   sale = draft,
 ) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   useAuth.mockReturnValue({
     session: {
@@ -70,6 +76,7 @@ function renderDetail(
     },
   });
   salesApi.get.mockResolvedValue(sale);
+  salesApi.returns.mockResolvedValue({ items: [] });
   salesApi.cancel.mockResolvedValue({
     ...draft,
     status: "cancelled",
@@ -308,5 +315,410 @@ describe("SaleDetailPage", () => {
     expect(
       screen.getByRole("link", { name: "Descargar comprobante PDF" }),
     ).toHaveAttribute("href", "/api/v1/sales/12/reversal/pdf");
+  }, 15000);
+
+  it("registers a reviewed customer return and displays its derived history", async () => {
+    const user = userEvent.setup();
+    const confirmedSale = {
+      ...draft,
+      status: "confirmed",
+      version: 7,
+      warehouseIsActive: true,
+      confirmedAt: "2026-10-30T12:00:00.000Z",
+      lines: [
+        {
+          ...draft.lines[0],
+          returnedQuantity: 0,
+          returnableQuantity: 3,
+          restockedQuantity: 0,
+        },
+      ],
+    };
+    salesApi.createReturn
+      .mockRejectedValueOnce({ status: 0, message: "Conexión interrumpida." })
+      .mockResolvedValueOnce({
+        sale: { ...confirmedSale, version: 8 },
+        customerReturn: { id: "80", sourceOperationId: "901" },
+        replayed: false,
+      });
+    renderDetail(["sales.read", "sales.return"], confirmedSale);
+    await user.click(
+      await screen.findByRole("button", { name: /registrar devolución/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Referencia"), {
+      target: { value: "DEV-80" },
+    });
+    await user.type(
+      within(dialog).getByLabelText("Motivo comercial"),
+      "Empaque sin daños",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Observación de recepción e inspección"),
+      "Conteo cotejado en bodega.",
+    );
+    await user.click(
+      within(dialog).getByRole("checkbox", { name: /Arroz mayorista/ }),
+    );
+    await user.clear(
+      within(dialog).getByLabelText(
+        "Cantidad apta para reintegrar: Arroz mayorista",
+      ),
+    );
+    await user.type(
+      within(dialog).getByLabelText(
+        "Cantidad apta para reintegrar: Arroz mayorista",
+      ),
+      "1",
+    );
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: "Declaro que recibí físicamente las cantidades indicadas",
+      }),
+    );
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: "Declaro que inspeccioné la mercancía y clasifiqué su aptitud",
+      }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Revisar devolución" }),
+    );
+    expect(
+      within(dialog).getByText(/La venta seguirá confirmada/),
+    ).toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Confirmar devolución definitiva",
+      }),
+    );
+    await user.click(
+      await within(dialog).findByRole("button", {
+        name: "Reintentar devolución",
+      }),
+    );
+    await waitFor(() =>
+      expect(salesApi.createReturn).toHaveBeenCalledWith(
+        "12",
+        {
+          expectedVersion: 7,
+          reference: "DEV-80",
+          reason: "Empaque sin daños",
+          physicalObservation: "Conteo cotejado en bodega.",
+          receivedPhysical: true,
+          inspected: true,
+          lines: [
+            {
+              saleLineId: "121",
+              quantityReceived: 1,
+              quantityRestocked: 1,
+              nonRestockReason: "",
+            },
+          ],
+        },
+        expect.any(String),
+      ),
+    );
+    expect(salesApi.createReturn).toHaveBeenCalledTimes(2);
+    expect(salesApi.createReturn.mock.calls[0][2]).toBe(
+      salesApi.createReturn.mock.calls[1][2],
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  }, 15000);
+
+  it("separates product identity, commercial unit, historical quantities, and editable return quantities", async () => {
+    const user = userEvent.setup();
+    const confirmed = {
+      ...draft,
+      status: "confirmed",
+      warehouseIsActive: true,
+      lines: [
+        {
+          ...draft.lines[0],
+          name: "iPhone 18",
+          sku: "ITEM-001",
+          unit: "caja",
+          quantity: 5,
+          returnedQuantity: 2,
+          returnableQuantity: 3,
+          restockedQuantity: 1,
+        },
+      ],
+    };
+    renderDetail(["sales.read", "sales.return"], confirmed);
+    await user.click(
+      await screen.findByRole("button", { name: /registrar devolución/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByRole("heading", { name: "iPhone 18" }),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText("ITEM-001")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("caja", {
+        selector: ".sale-return-unit strong",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("5", {
+        selector: "[data-summary='sold'] strong",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("2", {
+        selector: "[data-summary='returned'] strong",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("3", {
+        selector: "[data-summary='pending'] strong",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByLabelText("Cantidad recibida ahora: iPhone 18"),
+    ).toHaveAttribute("max", "3");
+    expect(
+      within(dialog).getByLabelText("Cantidad apta para reintegrar: iPhone 18"),
+    ).toBeDisabled();
+  });
+
+  it("marks a fully returned product as unavailable and disables review when no products remain", async () => {
+    const user = userEvent.setup();
+    const confirmed = {
+      ...draft,
+      status: "confirmed",
+      warehouseIsActive: true,
+      lines: [
+        {
+          ...draft.lines[0],
+          quantity: 1,
+          returnedQuantity: 1,
+          returnableQuantity: 0,
+          restockedQuantity: 1,
+        },
+      ],
+    };
+    renderDetail(["sales.read", "sales.return"], confirmed);
+    await user.click(
+      await screen.findByRole("button", { name: /registrar devolución/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        "Todas las unidades de este producto ya fueron devueltas.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByLabelText(
+        "Seleccionar Arroz mayorista para devolución",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByLabelText(
+        "Cantidad recibida ahora: Arroz mayorista",
+      ),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "No hay productos con cantidades pendientes de devolución.",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Revisar devolución" }),
+    ).toBeDisabled();
+  });
+
+  it("calculates non-restocked quantity per product, requires its reason, and sends the reviewed line quantities unchanged", async () => {
+    const user = userEvent.setup();
+    const confirmed = {
+      ...draft,
+      status: "confirmed",
+      warehouseIsActive: true,
+      lines: [
+        {
+          ...draft.lines[0],
+          name: "Café",
+          sku: "CAF-01",
+          unit: "bulto",
+          quantity: 5,
+          returnedQuantity: 1,
+          returnableQuantity: 4,
+        },
+        {
+          ...draft.lines[0],
+          id: "122",
+          name: "Vaso",
+          sku: "VAS-01",
+          unit: "unidad",
+          quantity: 4,
+          returnedQuantity: 0,
+          returnableQuantity: 4,
+        },
+      ],
+    };
+    salesApi.createReturn.mockResolvedValue({
+      sale: { ...confirmed, version: confirmed.version + 1 },
+      customerReturn: { id: "81", sourceOperationId: "902" },
+      replayed: false,
+    });
+    renderDetail(["sales.read", "sales.return"], confirmed);
+    await user.click(
+      await screen.findByRole("button", { name: /registrar devolución/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Referencia"), "D");
+    await user.type(within(dialog).getByLabelText("Motivo comercial"), "D");
+    await user.type(
+      within(dialog).getByLabelText("Observación de recepción e inspección"),
+      "OK!",
+    );
+    await user.click(
+      within(dialog).getByLabelText("Seleccionar Café para devolución"),
+    );
+    await user.clear(
+      within(dialog).getByLabelText("Cantidad recibida ahora: Café"),
+    );
+    await user.type(
+      within(dialog).getByLabelText("Cantidad recibida ahora: Café"),
+      "3",
+    );
+    await user.clear(
+      within(dialog).getByLabelText("Cantidad apta para reintegrar: Café"),
+    );
+    await user.type(
+      within(dialog).getByLabelText("Cantidad apta para reintegrar: Café"),
+      "1",
+    );
+    expect(
+      within(dialog).getByLabelText("Cantidad no apta para reintegrar: Café"),
+    ).toHaveTextContent("2");
+    const review = within(dialog).getByRole("button", {
+      name: "Revisar devolución",
+    });
+    expect(review).toBeDisabled();
+    await user.type(
+      within(dialog).getByLabelText("Motivo de no reintegro: Café"),
+      "D",
+    );
+    await user.click(
+      within(dialog).getByLabelText("Seleccionar Vaso para devolución"),
+    );
+    await user.clear(
+      within(dialog).getByLabelText("Cantidad recibida ahora: Vaso"),
+    );
+    await user.type(
+      within(dialog).getByLabelText("Cantidad recibida ahora: Vaso"),
+      "2",
+    );
+    await user.clear(
+      within(dialog).getByLabelText("Cantidad apta para reintegrar: Vaso"),
+    );
+    await user.type(
+      within(dialog).getByLabelText("Cantidad apta para reintegrar: Vaso"),
+      "0",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Motivo de no reintegro: Vaso"),
+      "D",
+    );
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: "Declaro que recibí físicamente las cantidades indicadas",
+      }),
+    );
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: "Declaro que inspeccioné la mercancía y clasifiqué su aptitud",
+      }),
+    );
+    await user.click(review);
+    expect(
+      dialog.querySelector(
+        "[data-review='not-restocked'][data-product='Café'] dd",
+      ),
+    ).toHaveTextContent("2 bulto");
+    expect(
+      dialog.querySelector(
+        "[data-review='not-restocked'][data-product='Vaso'] dd",
+      ),
+    ).toHaveTextContent("2 unidad");
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Confirmar devolución definitiva",
+      }),
+    );
+    await waitFor(() =>
+      expect(salesApi.createReturn).toHaveBeenCalledWith(
+        "12",
+        expect.objectContaining({
+          lines: [
+            {
+              saleLineId: "121",
+              quantityReceived: 3,
+              quantityRestocked: 1,
+              nonRestockReason: "D",
+            },
+            {
+              saleLineId: "122",
+              quantityReceived: 2,
+              quantityRestocked: 0,
+              nonRestockReason: "D",
+            },
+          ],
+        }),
+        expect.any(String),
+      ),
+    );
+  }, 15000);
+
+  it("rejects received quantities beyond the pending amount and apt quantities beyond current receipt", async () => {
+    const user = userEvent.setup();
+    const confirmed = {
+      ...draft,
+      status: "confirmed",
+      warehouseIsActive: true,
+      lines: [
+        {
+          ...draft.lines[0],
+          quantity: 2,
+          returnedQuantity: 1,
+          returnableQuantity: 1,
+        },
+      ],
+    };
+    renderDetail(["sales.read", "sales.return"], confirmed);
+    await user.click(
+      await screen.findByRole("button", { name: /registrar devolución/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Referencia"), "DEV-LIMITES");
+    await user.type(
+      within(dialog).getByLabelText("Motivo comercial"),
+      "Prueba de límites",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Observación de recepción e inspección"),
+      "Revisión física completa.",
+    );
+    await user.click(
+      within(dialog).getByLabelText(
+        "Seleccionar Arroz mayorista para devolución",
+      ),
+    );
+    const received = within(dialog).getByLabelText(
+      "Cantidad recibida ahora: Arroz mayorista",
+    );
+    fireEvent.change(received, { target: { value: "2" } });
+    expect(received).toHaveAttribute("max", "1");
+    expect(
+      within(dialog).getByRole("button", { name: "Revisar devolución" }),
+    ).toBeDisabled();
+    fireEvent.change(received, { target: { value: "1" } });
+    const apt = within(dialog).getByLabelText(
+      "Cantidad apta para reintegrar: Arroz mayorista",
+    );
+    fireEvent.change(apt, { target: { value: "2" } });
+    expect(apt).toHaveAttribute("max", "1");
+    expect(
+      within(dialog).getByRole("button", { name: "Revisar devolución" }),
+    ).toBeDisabled();
   });
 });
