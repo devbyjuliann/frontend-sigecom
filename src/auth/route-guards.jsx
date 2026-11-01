@@ -68,6 +68,17 @@ export function RequirePermission({ permission }) {
   return <Outlet />;
 }
 
+export function RequireUserAdministration() {
+  const { session } = useAuth();
+  if (
+    session?.user?.role !== "administrator" ||
+    !session?.permissions?.includes("users.read")
+  ) {
+    return <Navigate to="/acceso-denegado" replace />;
+  }
+  return <Outlet />;
+}
+
 export function RedirectIfAuthenticated() {
   const { session, isLoading } = useAuth();
   if (isLoading) {

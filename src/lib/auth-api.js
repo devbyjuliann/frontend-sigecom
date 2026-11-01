@@ -221,6 +221,34 @@ export const warehousesApi = {
   },
 };
 
+export const usersApi = {
+  list(filters = {}) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== null && value !== "") {
+        search.set(key, String(value));
+      }
+    }
+    const query = search.toString();
+    return get(`/api/v1/users${query ? `?${query}` : ""}`);
+  },
+  roles() {
+    return get("/api/v1/users/roles");
+  },
+  get(id) {
+    return get(`/api/v1/users/${encodeURIComponent(id)}`);
+  },
+  create(input) {
+    return post("/api/v1/users", input);
+  },
+  update(id, input) {
+    return patch(`/api/v1/users/${encodeURIComponent(id)}`, input);
+  },
+  setStatus(id, input) {
+    return patch(`/api/v1/users/${encodeURIComponent(id)}/status`, input);
+  },
+};
+
 export const productsApi = {
   list(filters = {}) {
     const search = new URLSearchParams();

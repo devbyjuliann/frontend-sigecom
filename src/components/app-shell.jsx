@@ -84,6 +84,13 @@ const navigation = [
     permission: "sales.read",
     icon: Receipt,
   },
+  {
+    label: "Usuarios",
+    path: "/usuarios",
+    permission: "users.read",
+    administratorOnly: true,
+    icon: UsersThree,
+  },
 ];
 const profileDestination = {
   label: "Mi perfil",
@@ -187,10 +194,13 @@ function SidebarContent({
   showCollapse = true,
 }) {
   const { session } = useAuth();
-  const destinations = navigation.filter((item) =>
-    (Array.isArray(item.permission) ? item.permission : [item.permission]).some(
-      (permission) => session.permissions.includes(permission),
-    ),
+  const destinations = navigation.filter(
+    (item) =>
+      (!item.administratorOnly || session.user.role === "administrator") &&
+      (Array.isArray(item.permission)
+        ? item.permission
+        : [item.permission]
+      ).some((permission) => session.permissions.includes(permission)),
   );
   return (
     <>
