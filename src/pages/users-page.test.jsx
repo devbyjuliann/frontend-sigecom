@@ -23,6 +23,7 @@ vi.mock("../lib/auth-api.js", async (importOriginal) => {
       create: vi.fn(),
       update: vi.fn(),
       setStatus: vi.fn(),
+      resetPassword: vi.fn(),
     },
     warehousesApi: { list: vi.fn() },
   };
@@ -144,6 +145,9 @@ describe("UsersPage", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Cerrar entrega segura" }),
     );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Descartar contraseña" }),
+    );
     await waitFor(() =>
       expect(
         screen.queryByText("one-time-generated-secret"),
@@ -200,5 +204,84 @@ describe("UsersPage", () => {
         email: "ana.nueva@sigecom.co",
       }),
     );
+  });
+
+  it("confirms a password reset and keeps the generated secret out of query caches", async () => {
+    const { queryClient } = renderPage();
+    usersApi.get.mockResolvedValueOnce({
+      ...user,
+      revision: "revision-current",
+    });
+    await screen.findByRole("row", { name: /Ana Gómez/ });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Restablecer contraseña de Ana Gómez",
+      }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Restablecer contraseña" }),
+    ).toHaveTextContent("Ana Gómez");
+    expect(usersApi.resetPassword).not.toHaveBeenCalled();
+    usersApi.resetPassword.mockResolvedValueOnce({
+      user: { ...user, passwordChangeRequired: true },
+      temporaryPassword: "temporary-reset-secret",
+      revokedSessions: 2,
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirmar restablecimiento" }),
+    );
+    expect(
+      await screen.findByText("temporary-reset-secret"),
+    ).toBeInTheDocument();
+    expect(usersApi.resetPassword).toHaveBeenCalledWith("42", {
+      expectedRevision: "revision-current",
+      confirmReset: true,
+    });
+    expect(
+      JSON.stringify(
+        queryClient
+          .getQueryCache()
+          .getAll()
+          .map((query) => query.state.data),
+      ),
+    ).not.toContain("temporary-reset-secret");
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
+    expect(usersApi.resetPassword).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not repeat an uncertain reset and allows a status-only refresh", async () => {
+    renderPage();
+    usersApi.get
+      .mockResolvedValueOnce({ ...user, revision: "revision-current" })
+      .mockResolvedValueOnce({
+        ...user,
+        revision: "revision-after-uncertain-request",
+        passwordChangeRequired: true,
+      });
+    usersApi.resetPassword.mockRejectedValueOnce({
+      code: "NETWORK_ERROR",
+      status: 0,
+      message: "No se pudo conectar.",
+    });
+    await screen.findByRole("row", { name: /Ana Gómez/ });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Restablecer contraseña de Ana Gómez",
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Confirmar restablecimiento",
+      }),
+    );
+    expect(
+      await screen.findByText(/No se pudo confirmar el resultado/),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Consultar estado actual" }),
+    );
+    expect(await screen.findByText(/Estado actualizado/)).toBeInTheDocument();
+    expect(usersApi.resetPassword).toHaveBeenCalledTimes(1);
+    expect(usersApi.get).toHaveBeenCalledTimes(2);
   });
 });

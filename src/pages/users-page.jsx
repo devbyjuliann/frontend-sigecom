@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createColumnHelper } from "@tanstack/react-table";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -7,6 +7,7 @@ import { MagnifyingGlass } from "@phosphor-icons/react/MagnifyingGlass";
 import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { Plus } from "@phosphor-icons/react/Plus";
 import { Power } from "@phosphor-icons/react/Power";
+import { Key } from "@phosphor-icons/react/Key";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useSearchParams } from "react-router-dom";
@@ -96,9 +97,27 @@ export default function UsersPage() {
   const [warehousePage, setWarehousePage] = useState(1);
   const [confirming, setConfirming] = useState(null);
   const [temporaryPassword, setTemporaryPassword] = useState(null);
+  const [credentialRecipient, setCredentialRecipient] = useState(null);
+  const [discardCredential, setDiscardCredential] = useState(false);
+  const [copyError, setCopyError] = useState("");
+  const [resetTarget, setResetTarget] = useState(null);
+  const [resetPending, setResetPending] = useState(false);
+  const [resetRefreshing, setResetRefreshing] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetUncertain, setResetUncertain] = useState(false);
   const [accessConfirmation, setAccessConfirmation] = useState(null);
   const [pendingFormValues, setPendingFormValues] = useState(null);
   const [savePending, setSavePending] = useState(false);
+
+  useEffect(() => {
+    if (!temporaryPassword) return undefined;
+    const clearOnPageHide = () => {
+      setTemporaryPassword(null);
+      setCredentialRecipient(null);
+    };
+    window.addEventListener("pagehide", clearOnPageHide, { once: true });
+    return () => window.removeEventListener("pagehide", clearOnPageHide);
+  }, [temporaryPassword]);
 
   const form = useForm({
     resolver: zodResolver(formSchema),
@@ -277,6 +296,7 @@ export default function UsersPage() {
         });
         setFormOpen(false);
         setTemporaryPassword(result.temporaryPassword);
+        setCredentialRecipient(result.user);
         toast.success(
           "Cuenta creada. Entrega la contraseña temporal por un canal privado.",
         );
@@ -350,6 +370,97 @@ export default function UsersPage() {
       }
     } finally {
       setSavePending(false);
+    }
+  }
+
+  const beginPasswordReset = useCallback(
+    async (user) => {
+      if (user.id === session.user.id || !user.isActive || !user.canManage)
+        return;
+      setResetError("");
+      setResetUncertain(false);
+      try {
+        const current = await usersApi.get(user.id);
+        if (
+          current.id === session.user.id ||
+          !current.isActive ||
+          !current.canManage
+        ) {
+          setResetError(
+            "La cuenta ya no cumple las condiciones para restablecer la contraseña. Actualiza el listado.",
+          );
+          setResetTarget(current);
+          return;
+        }
+        setResetTarget(current);
+      } catch (error) {
+        toast.error(error.message || "No se pudo consultar la cuenta.");
+      }
+    },
+    [session.user.id],
+  );
+
+  async function confirmPasswordReset() {
+    if (!resetTarget || resetPending) return;
+    setResetPending(true);
+    setResetError("");
+    setResetUncertain(false);
+    try {
+      const result = await usersApi.resetPassword(resetTarget.id, {
+        expectedRevision: resetTarget.revision,
+        confirmReset: true,
+      });
+      setResetTarget(null);
+      setTemporaryPassword(result.temporaryPassword);
+      setCredentialRecipient(result.user);
+      setDiscardCredential(false);
+      setCopyError("");
+      await queryClient.invalidateQueries({ queryKey: listQueryKey });
+    } catch (error) {
+      const uncertain =
+        error.code === "NETWORK_ERROR" ||
+        error.status === 0 ||
+        error.status >= 500;
+      setResetUncertain(uncertain);
+      setResetError(
+        uncertain
+          ? "No se pudo confirmar el resultado. No repitas la operación automáticamente. Consulta el estado de la cuenta antes de decidir si necesitas iniciar otro restablecimiento confirmado."
+          : error.code === "USER_REVISION_CONFLICT"
+            ? "La cuenta cambió desde que la consultaste. Consulta su estado y vuelve a iniciar un nuevo restablecimiento confirmado si corresponde."
+            : error.message || "No se pudo restablecer la contraseña.",
+      );
+    } finally {
+      setResetPending(false);
+    }
+  }
+
+  async function refreshPasswordResetState() {
+    if (!resetTarget || resetRefreshing) return;
+    setResetRefreshing(true);
+    try {
+      const current = await usersApi.get(resetTarget.id);
+      setResetTarget(current);
+      setResetError(
+        resetUncertain
+          ? "Estado actualizado. La contraseña temporal no puede recuperarse. Si necesitas otra, cierra y vuelve a iniciar un restablecimiento confirmado; esto invalidará la credencial vigente."
+          : "Estado actualizado. Cierra este diálogo y vuelve a consultar la cuenta antes de confirmar una nueva operación.",
+      );
+    } catch (error) {
+      setResetError(error.message || "No se pudo consultar el estado actual.");
+    } finally {
+      setResetRefreshing(false);
+    }
+  }
+
+  async function copyTemporaryPassword() {
+    try {
+      await navigator.clipboard.writeText(temporaryPassword);
+      setCopyError("");
+      toast.success("Contraseña copiada. Entrégala por un canal privado.");
+    } catch {
+      setCopyError(
+        "No se pudo copiar. La contraseña permanece visible para que puedas entregarla manualmente.",
+      );
     }
   }
 
@@ -474,13 +585,31 @@ export default function UsersPage() {
                   <Power size={17} aria-hidden="true" />
                 </Button>
               )}
+              {current.id === session.user.id ? null : !current.isActive ? (
+                <span
+                  className="table-secondary-cell"
+                  title="Activa la cuenta antes de restablecer su contraseña."
+                >
+                  Restablecimiento no disponible: cuenta inactiva
+                </span>
+              ) : (
+                <Button
+                  className="table-icon-button"
+                  variant="ghost"
+                  type="button"
+                  aria-label={`Restablecer contraseña de ${current.displayName || current.email}`}
+                  onClick={() => void beginPasswordReset(current)}
+                >
+                  <Key size={17} aria-hidden="true" />
+                </Button>
+              )}
             </div>
           );
         },
       }),
     ];
     return base;
-  }, [canManage, loadingEditId, openEdit, session.user.id]);
+  }, [beginPasswordReset, canManage, loadingEditId, openEdit, session.user.id]);
 
   const result = listQuery.data;
   const pageCount = result?.pagination.pageCount || 0;
@@ -1059,9 +1188,86 @@ export default function UsersPage() {
       </Dialog.Root>
 
       <Dialog.Root
+        open={Boolean(resetTarget)}
+        onOpenChange={(open) => {
+          if (!open && !resetPending) {
+            setResetTarget(null);
+            setResetError("");
+          }
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="module-dialog-overlay" />
+          <Dialog.Content
+            className="module-dialog module-dialog--confirm"
+            aria-describedby="password-reset-description"
+          >
+            <Dialog.Title className="module-dialog__title">
+              Restablecer contraseña
+            </Dialog.Title>
+            <Dialog.Description
+              id="password-reset-description"
+              className="module-dialog__description"
+            >
+              Cuenta: {resetTarget?.displayName || "Sin nombre"} ·{" "}
+              {resetTarget?.email} ·{" "}
+              {roleNames[resetTarget?.roleCode] || resetTarget?.roleName}
+            </Dialog.Description>
+            <p className="table-secondary-cell">
+              Cambio obligatorio actual:{" "}
+              {resetTarget?.passwordChangeRequired
+                ? "Pendiente"
+                : "No pendiente"}
+            </p>
+            <div className="user-scope-warning">
+              La contraseña anterior dejará de funcionar, se cerrarán las
+              sesiones existentes y la persona deberá definir una contraseña
+              nueva antes de entrar a los módulos. La temporal se mostrará una
+              sola vez, sin caducidad propia.
+            </div>
+            {resetError ? (
+              <div role="alert">
+                <p className="field-error">{resetError}</p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={resetRefreshing}
+                  onClick={() => void refreshPasswordResetState()}
+                >
+                  {resetRefreshing ? "Consultando…" : "Consultar estado actual"}
+                </Button>
+              </div>
+            ) : null}
+            <div className="module-dialog__actions">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={resetPending}
+                onClick={() => {
+                  setResetTarget(null);
+                  setResetError("");
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={resetPending || Boolean(resetError)}
+                onClick={() => void confirmPasswordReset()}
+              >
+                {resetPending
+                  ? "Restableciendo…"
+                  : "Confirmar restablecimiento"}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root
         open={Boolean(temporaryPassword)}
         onOpenChange={(open) => {
-          if (!open) setTemporaryPassword(null);
+          if (!open) setDiscardCredential(true);
         }}
       >
         <Dialog.Portal>
@@ -1077,23 +1283,65 @@ export default function UsersPage() {
               id="temporary-password-description"
               className="module-dialog__description"
             >
-              Esta contraseña se muestra una sola vez. Transmítela al usuario
-              por un canal privado.
+              {credentialRecipient?.displayName || credentialRecipient?.email}:
+              esta contraseña se muestra una sola vez. Transmítela por un canal
+              privado. No es de un solo uso ni tiene caducidad propia.
             </Dialog.Description>
             <div className="user-secret-value" aria-label="Contraseña temporal">
               {temporaryPassword}
             </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void copyTemporaryPassword()}
+            >
+              Copiar contraseña
+            </Button>
+            {copyError ? (
+              <p className="field-error" role="alert">
+                {copyError}
+              </p>
+            ) : null}
             <p className="user-confirm-note">
               No cierres este panel hasta haberla entregado. SIGECOM no puede
               recuperar esta contraseña si se pierde.
             </p>
+            {discardCredential ? (
+              <p className="user-scope-warning" role="alert">
+                Al cerrar se borrará la contraseña visible y no podrá
+                recuperarse. ¿Deseas descartarla?
+              </p>
+            ) : null}
             <div className="module-dialog__actions">
+              {discardCredential ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setDiscardCredential(false)}
+                >
+                  Seguir entregando
+                </Button>
+              ) : null}
               <Button
                 type="button"
-                onClick={() => setTemporaryPassword(null)}
-                aria-label="Cerrar entrega segura"
+                onClick={() => {
+                  if (!discardCredential) setDiscardCredential(true);
+                  else {
+                    setTemporaryPassword(null);
+                    setCredentialRecipient(null);
+                    setDiscardCredential(false);
+                    setCopyError("");
+                  }
+                }}
+                aria-label={
+                  discardCredential
+                    ? "Descartar contraseña"
+                    : "Cerrar entrega segura"
+                }
               >
-                Cerrar y borrar
+                {discardCredential
+                  ? "Descartar contraseña"
+                  : "Cerrar entrega segura"}
               </Button>
             </div>
           </Dialog.Content>

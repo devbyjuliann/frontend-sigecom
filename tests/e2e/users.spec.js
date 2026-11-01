@@ -6,6 +6,8 @@ import { createDatabasePool } from "../../../backend-sigecom/src/db/pool.js";
 
 const screenshotDirectory = join(tmpdir(), "opencode", "sigecom-6.1a-visual");
 
+test.use({ trace: "off", screenshot: "off", video: "off" });
+
 async function signIn(page) {
   await page.goto("/ingresar");
   await page
@@ -123,10 +125,13 @@ test("administrator can consult the user directory at required responsive viewpo
     const temporaryPassword = await credentialDialog
       .locator(".user-secret-value")
       .innerText();
-    expect(temporaryPassword).toMatch(/^[A-Za-z0-9_-]{40,}$/);
     await credentialDialog
       .getByRole("button", { name: "Cerrar entrega segura" })
       .click();
+    await credentialDialog
+      .getByRole("button", { name: "Descartar contraseña" })
+      .click();
+    expect(temporaryPassword).toMatch(/^[A-Za-z0-9_-]{40,}$/);
     await page
       .getByRole("searchbox", { name: "Buscar por nombre o correo" })
       .fill(testEmail);
@@ -144,7 +149,7 @@ test("administrator can consult the user directory at required responsive viewpo
     await confirmDialog
       .getByRole("button", { name: "Desactivar cuenta" })
       .click();
-    await expect(userRow.getByText("Inactiva")).toBeVisible();
+    await expect(userRow.getByText("Inactiva", { exact: true })).toBeVisible();
   } finally {
     if (testEmail) {
       const [[created]] = await pool.execute(

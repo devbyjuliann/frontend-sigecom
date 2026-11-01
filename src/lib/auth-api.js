@@ -247,6 +247,12 @@ export const usersApi = {
   setStatus(id, input) {
     return patch(`/api/v1/users/${encodeURIComponent(id)}/status`, input);
   },
+  resetPassword(id, input) {
+    return post(
+      `/api/v1/users/${encodeURIComponent(id)}/password-reset`,
+      input,
+    );
+  },
 };
 
 export const productsApi = {
