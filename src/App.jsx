@@ -7,6 +7,7 @@ import {
   RedirectIfAuthenticated,
   RequireAuth,
   RequirePermission,
+  RequireRoleAdministration,
   RequireUserAdministration,
 } from "./auth/route-guards.jsx";
 
@@ -45,6 +46,9 @@ const PurchaseDetailPage = lazy(
 );
 const SalesPage = lazy(() => import("./pages/sales-page.jsx"));
 const UsersPage = lazy(() => import("./pages/users-page.jsx"));
+const RolesPermissionsPage = lazy(
+  () => import("./pages/roles-permissions-page.jsx"),
+);
 const SaleFormPage = lazy(() => import("./pages/sale-form-page.jsx"));
 const SaleDetailPage = lazy(() => import("./pages/sale-detail-page.jsx"));
 
@@ -104,6 +108,14 @@ function AppRoutes() {
           <Route element={<RequireUserAdministration />}>
             <Route element={<AppShell />}>
               <Route path="/usuarios" element={<UsersPage />} />
+            </Route>
+          </Route>
+          <Route element={<RequireRoleAdministration />}>
+            <Route element={<AppShell />}>
+              <Route
+                path="/administracion/roles"
+                element={<RolesPermissionsPage />}
+              />
             </Route>
           </Route>
           <Route element={<RequirePermission permission="categories.read" />}>

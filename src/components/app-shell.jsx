@@ -9,6 +9,7 @@ import { Warehouse } from "@phosphor-icons/react/Warehouse";
 import { Package } from "@phosphor-icons/react/Package";
 import { Archive } from "@phosphor-icons/react/Archive";
 import { UsersThree } from "@phosphor-icons/react/UsersThree";
+import { ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { Truck } from "@phosphor-icons/react/Truck";
 import { ClipboardText } from "@phosphor-icons/react/ClipboardText";
 import { Receipt } from "@phosphor-icons/react/Receipt";
@@ -90,6 +91,20 @@ const navigation = [
     permission: "users.read",
     administratorOnly: true,
     icon: UsersThree,
+  },
+  {
+    label: "Roles y permisos",
+    path: "/administracion/roles",
+    permission: "permissions.manage",
+    requiredPermissions: [
+      "users.read",
+      "users.manage",
+      "roles.manage",
+      "permissions.manage",
+      "warehouses.read",
+    ],
+    administratorOnly: true,
+    icon: ShieldCheck,
   },
 ];
 const profileDestination = {
@@ -197,6 +212,10 @@ function SidebarContent({
   const destinations = navigation.filter(
     (item) =>
       (!item.administratorOnly || session.user.role === "administrator") &&
+      (!item.requiredPermissions ||
+        item.requiredPermissions.every((permission) =>
+          session.permissions.includes(permission),
+        )) &&
       (Array.isArray(item.permission)
         ? item.permission
         : [item.permission]

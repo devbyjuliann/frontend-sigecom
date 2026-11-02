@@ -6,10 +6,37 @@ import {
   dashboardApi,
   productsApi,
   purchasesApi,
+  rolesApi,
   salesApi,
   suppliersApi,
   warehousesApi,
 } from "./auth-api.js";
+
+describe("rolesApi", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("reads role permissions and submits an explicit reviewed update", async () => {
+    const csrfToken = "r".repeat(64);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken }))
+      .mockResolvedValueOnce(Response.json({ changed: true }));
+    vi.stubGlobal("fetch", fetch);
+    await rolesApi.updatePermissions("seller", {
+      expectedRevision: "revision-token-1234567890",
+      configurablePermissionCodes: ["sales.read"],
+      confirmChange: true,
+    });
+    expect(fetch.mock.calls.at(-1)[0]).toBe("/api/v1/roles/seller/permissions");
+    expect(fetch.mock.calls.at(-1)[1]).toMatchObject({
+      method: "PATCH",
+      headers: expect.objectContaining({ "X-CSRF-Token": csrfToken }),
+    });
+  });
+});
 
 describe("authApi", () => {
   afterEach(() => {

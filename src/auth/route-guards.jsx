@@ -79,6 +79,24 @@ export function RequireUserAdministration() {
   return <Outlet />;
 }
 
+export function RequireRoleAdministration() {
+  const { session } = useAuth();
+  const required = [
+    "users.read",
+    "users.manage",
+    "roles.manage",
+    "permissions.manage",
+    "warehouses.read",
+  ];
+  if (
+    session?.user?.role !== "administrator" ||
+    !required.every((permission) => session?.permissions?.includes(permission))
+  ) {
+    return <Navigate to="/acceso-denegado" replace />;
+  }
+  return <Outlet />;
+}
+
 export function RedirectIfAuthenticated() {
   const { session, isLoading } = useAuth();
   if (isLoading) {

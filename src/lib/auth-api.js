@@ -255,6 +255,24 @@ export const usersApi = {
   },
 };
 
+export const rolesApi = {
+  list() {
+    return get("/api/v1/roles");
+  },
+  permissions() {
+    return get("/api/v1/permissions");
+  },
+  getPermissions(roleCode) {
+    return get(`/api/v1/roles/${encodeURIComponent(roleCode)}/permissions`);
+  },
+  updatePermissions(roleCode, input) {
+    return patch(
+      `/api/v1/roles/${encodeURIComponent(roleCode)}/permissions`,
+      input,
+    );
+  },
+};
+
 export const productsApi = {
   list(filters = {}) {
     const search = new URLSearchParams();
