@@ -217,6 +217,143 @@ describe("AuditPage", () => {
     expect(screen.queryByText(/\{"fields"/)).not.toBeInTheDocument();
   });
 
+  it("presenta importes con precisión sin convertirlos a número", async () => {
+    const sale = {
+      ...event,
+      module: "sales",
+      action: "sales.confirmed",
+      entity: { type: "sale", id: "81" },
+      details: { total: "9007199254740993.27", sourceOperationId: "92" },
+    };
+    auditApi.list.mockResolvedValueOnce({
+      items: [sale],
+      pagination: { pageSize: 20, hasMore: false, nextCursor: null },
+    });
+    auditApi.event.mockResolvedValueOnce(sale);
+    renderPage({ permissions: ["audit.read", "sales.read"] });
+    await screen.findByRole("row", { name: /Venta confirmada/ });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Ver detalle del evento 7001" })[0],
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del evento",
+    });
+    expect(
+      await within(dialog).findByText("Total histórico (COP)"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/9\.007\.199\.254\.740\.993,27/),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/\{"total"/)).not.toBeInTheDocument();
+  });
+
+  it("no inventa el total cuando el evento confirmado no conserva el snapshot", async () => {
+    const sale = {
+      ...event,
+      module: "sales",
+      action: "sales.confirmed",
+      entity: { type: "sale", id: "81" },
+      details: { sourceOperationId: "92" },
+      detailState: "partial",
+    };
+    auditApi.list.mockResolvedValueOnce({
+      items: [sale],
+      pagination: { pageSize: 20, hasMore: false, nextCursor: null },
+    });
+    auditApi.event.mockResolvedValueOnce(sale);
+    renderPage({ permissions: ["audit.read", "sales.read"] });
+    await screen.findByRole("row", { name: /Venta confirmada/ });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Ver detalle del evento 7001" })[0],
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del evento",
+    });
+    expect(
+      await within(dialog).findByText(
+        /El total histórico de esta venta no está disponible/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/COP\s*\$/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "purchases.receipt_confirmed",
+      "Recepción de mercancía",
+      "Cantidad recibida",
+      "17",
+      "Cantidad devuelta",
+    ],
+    [
+      "purchases.return_confirmed",
+      "Devolución a proveedor",
+      "Cantidad devuelta",
+      "5",
+      "Cantidad recibida",
+    ],
+  ])(
+    "presenta de forma diferenciada %s",
+    async (action, label, quantityLabel, quantity, absentLabel) => {
+      const purchase = {
+        ...event,
+        module: "purchases",
+        action,
+        entity: {
+          type:
+            action === "purchases.receipt_confirmed"
+              ? "purchase_receipt"
+              : "supplier_return",
+          id: "22",
+        },
+        details:
+          action === "purchases.receipt_confirmed"
+            ? {
+                orderId: "21",
+                receiptId: "22",
+                sourceOperationId: "23",
+                lineCount: 2,
+                receivedQuantity: 17,
+              }
+            : {
+                orderId: "21",
+                receiptId: "22",
+                sourceOperationId: "23",
+                lineCount: 2,
+                returnedQuantity: "5",
+              },
+      };
+      auditApi.list.mockResolvedValueOnce({
+        items: [purchase],
+        pagination: { pageSize: 20, hasMore: false, nextCursor: null },
+      });
+      auditApi.event.mockResolvedValueOnce(purchase);
+      renderPage({ permissions: ["audit.read", "purchases.read"] });
+      await screen.findByRole("row", { name: new RegExp(label) });
+      fireEvent.click(
+        screen.getAllByRole("button", {
+          name: "Ver detalle del evento 7001",
+        })[0],
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "Detalle del evento",
+      });
+      expect(
+        await within(dialog).findByText("Orden de compra"),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText("Recepción relacionada"),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText("Operación de Inventario"),
+      ).toBeInTheDocument();
+      expect(within(dialog).getByText(quantityLabel)).toBeInTheDocument();
+      expect(within(dialog).getByText(quantity)).toBeInTheDocument();
+      expect(within(dialog).queryByText(absentLabel)).not.toBeInTheDocument();
+      expect(within(dialog).queryByText(/\{"orderId"/)).not.toBeInTheDocument();
+    },
+  );
+
   it("muestra carga, ausencia de resultados y error con recuperación", async () => {
     auditApi.list.mockReturnValueOnce(new Promise(() => {}));
     const loadingView = renderPage();
@@ -263,7 +400,7 @@ describe("AuditPage", () => {
     expect(await within(dialog).findAllByText("No aplica")).toHaveLength(1);
     expect(
       await within(dialog).findByText(
-        /Algunos datos históricos no están disponibles/,
+        /El registro original no contiene todos los detalles/,
       ),
     ).toBeInTheDocument();
   });

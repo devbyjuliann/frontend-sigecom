@@ -55,8 +55,8 @@ const actionNames = {
   "products.activated": "Producto activado",
   "products.deactivated": "Producto desactivado",
   "profile.updated": "Perfil actualizado",
-  "purchases.receipt_confirmed": "Recepción confirmada",
-  "purchases.return_confirmed": "Devolución confirmada",
+  "purchases.receipt_confirmed": "Recepción de mercancía",
+  "purchases.return_confirmed": "Devolución a proveedor",
   "roles.permissions_updated": "Permisos actualizados",
   "sales.confirmed": "Venta confirmada",
   "sales.draft_created": "Borrador creado",
@@ -93,11 +93,14 @@ const detailNames = {
   method: "Método de acceso",
   name: "Nombre",
   neverDispatched: "Sin despacho",
-  operationId: "Operación relacionada",
+  operationId: "Operación de Inventario",
+  orderId: "Orden de compra",
   passwordChangeRequired: "Cambio de contraseña requerido",
   policyVersion: "Versión de política",
   previous: "Valor anterior",
   receiptId: "Recepción relacionada",
+  receivedQuantity: "Cantidad recibida",
+  returnedQuantity: "Cantidad devuelta",
   removedPermissionCount: "Permisos retirados",
   removedWarehouseIds: "Bodegas retiradas",
   revokedSessionCount: "Sesiones revocadas",
@@ -106,7 +109,8 @@ const detailNames = {
   saleDate: "Fecha del documento",
   sku: "SKU",
   sourceIssueOperationId: "Operación de origen",
-  sourceOperationId: "Operación relacionada",
+  sourceOperationId: "Operación de Inventario",
+  total: "Total histórico (COP)",
   version: "Versión actual",
   warehouseId: "Bodega",
   warehouseIds: "Bodegas asignadas",
@@ -127,6 +131,7 @@ const entityNames = {
   inventory_operation: "Operación de inventario",
   product: "Producto",
   purchase_order: "Orden de compra",
+  purchase_receipt: "Recepción de mercancía",
   sale: "Venta",
   supplier: "Proveedor",
   supplier_return: "Devolución a proveedor",
@@ -186,6 +191,26 @@ function formatCompactDate(value) {
   }).format(parsed);
 }
 
+function formatExactCop(value) {
+  if (typeof value !== "string" || !/^\d{1,63}\.\d{2}$/.test(value))
+    return null;
+  const [whole, cents] = value.split(".");
+  const formatted = new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(BigInt(whole));
+  return cents === "00" ? formatted : `${formatted},${cents}`;
+}
+
+function formatExactQuantity(value) {
+  if (typeof value !== "string" || !/^(0|[1-9]\d{0,63})$/.test(value))
+    return null;
+  return new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(
+    BigInt(value),
+  );
+}
+
 function detailValue(value) {
   if (typeof value === "boolean") return value ? "Sí" : "No";
   if (Array.isArray(value)) {
@@ -233,12 +258,16 @@ function projectedDetails(details = {}) {
       key,
       label: detailNames[key],
       value:
-        key === "fields" && Array.isArray(value)
-          ? value
-              .map((field) => fieldNames[field])
-              .filter(Boolean)
-              .join(", ")
-          : detailValue(value),
+        key === "total"
+          ? formatExactCop(value)
+          : key === "returnedQuantity"
+            ? formatExactQuantity(value)
+            : key === "fields" && Array.isArray(value)
+              ? value
+                  .map((field) => fieldNames[field])
+                  .filter(Boolean)
+                  .join(", ")
+              : detailValue(value),
     }))
     .filter(({ value }) => value !== null && value !== "");
 }
@@ -380,8 +409,14 @@ function DetailDialog({ eventId, scopeKey, onClose, onAuthorizationFailure }) {
               ))}
               {event.detailState === "partial" ? (
                 <p className="text-sm text-muted sm:col-span-2">
-                  Algunos datos históricos no están disponibles o no pueden
-                  verificarse.
+                  El registro original no contiene todos los detalles de esta
+                  operación.
+                </p>
+              ) : null}
+              {event.action === "sales.confirmed" && !event.details?.total ? (
+                <p className="text-sm text-muted sm:col-span-2">
+                  El total histórico de esta venta no está disponible en el
+                  registro original.
                 </p>
               ) : null}
             </dl>
