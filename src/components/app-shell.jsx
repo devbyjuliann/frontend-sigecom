@@ -12,6 +12,7 @@ import { UsersThree } from "@phosphor-icons/react/UsersThree";
 import { ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { Truck } from "@phosphor-icons/react/Truck";
 import { ClipboardText } from "@phosphor-icons/react/ClipboardText";
+import { ClockCounterClockwise } from "@phosphor-icons/react/ClockCounterClockwise";
 import { Receipt } from "@phosphor-icons/react/Receipt";
 import { House } from "@phosphor-icons/react/House";
 import { List } from "@phosphor-icons/react/List";
@@ -105,6 +106,13 @@ const navigation = [
     ],
     administratorOnly: true,
     icon: ShieldCheck,
+  },
+  {
+    label: "Auditoría",
+    path: "/auditoria",
+    permission: "audit.read",
+    allowedRoles: ["administrator", "auditor"],
+    icon: ClockCounterClockwise,
   },
 ];
 const profileDestination = {
@@ -212,6 +220,7 @@ function SidebarContent({
   const destinations = navigation.filter(
     (item) =>
       (!item.administratorOnly || session.user.role === "administrator") &&
+      (!item.allowedRoles || item.allowedRoles.includes(session.user.role)) &&
       (!item.requiredPermissions ||
         item.requiredPermissions.every((permission) =>
           session.permissions.includes(permission),

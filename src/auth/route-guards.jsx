@@ -68,6 +68,17 @@ export function RequirePermission({ permission }) {
   return <Outlet />;
 }
 
+export function RequireAuditAccess() {
+  const { session } = useAuth();
+  if (
+    !["administrator", "auditor"].includes(session?.user?.role) ||
+    !session?.permissions?.includes("audit.read")
+  ) {
+    return <Navigate to="/acceso-denegado" replace />;
+  }
+  return <Outlet />;
+}
+
 export function RequireUserAdministration() {
   const { session } = useAuth();
   if (

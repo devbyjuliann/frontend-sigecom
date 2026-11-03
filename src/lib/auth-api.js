@@ -80,15 +80,17 @@ async function post(path, body, { idempotencyKey } = {}) {
   return readResponse(response);
 }
 
-async function get(path) {
+async function get(path, { signal } = {}) {
   let response;
   try {
     response = await fetch(path, {
       method: "GET",
       credentials: "include",
+      signal,
       headers: { Accept: "application/json" },
     });
-  } catch {
+  } catch (error) {
+    if (signal?.aborted || error?.name === "AbortError") throw error;
     throw new ApiError({
       status: 0,
       code: "NETWORK_ERROR",
@@ -499,5 +501,19 @@ export const inventoryApi = {
     return get(
       `/api/v1/inventory/reconciliation${queryString({ warehouseId })}`,
     );
+  },
+};
+
+export const auditApi = {
+  list(filters = {}, { signal } = {}) {
+    return get(`/api/v1/audit-events${queryString(filters)}`, { signal });
+  },
+  options(filters = {}, { signal } = {}) {
+    return get(`/api/v1/audit-events/filter-options${queryString(filters)}`, {
+      signal,
+    });
+  },
+  event(id, { signal } = {}) {
+    return get(`/api/v1/audit-events/${encodeURIComponent(id)}`, { signal });
   },
 };

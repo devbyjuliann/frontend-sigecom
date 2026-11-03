@@ -6,6 +6,7 @@ import { AuthProvider } from "./auth/auth-context.jsx";
 import {
   RedirectIfAuthenticated,
   RequireAuth,
+  RequireAuditAccess,
   RequirePermission,
   RequireRoleAdministration,
   RequireUserAdministration,
@@ -49,6 +50,7 @@ const UsersPage = lazy(() => import("./pages/users-page.jsx"));
 const RolesPermissionsPage = lazy(
   () => import("./pages/roles-permissions-page.jsx"),
 );
+const AuditPage = lazy(() => import("./pages/audit-page.jsx"));
 const SaleFormPage = lazy(() => import("./pages/sale-form-page.jsx"));
 const SaleDetailPage = lazy(() => import("./pages/sale-detail-page.jsx"));
 
@@ -116,6 +118,11 @@ function AppRoutes() {
                 path="/administracion/roles"
                 element={<RolesPermissionsPage />}
               />
+            </Route>
+          </Route>
+          <Route element={<RequireAuditAccess />}>
+            <Route element={<AppShell />}>
+              <Route path="/auditoria" element={<AuditPage />} />
             </Route>
           </Route>
           <Route element={<RequirePermission permission="categories.read" />}>
