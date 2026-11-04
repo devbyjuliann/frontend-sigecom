@@ -478,6 +478,20 @@ function queryString(filters) {
   return query ? `?${query}` : "";
 }
 
+export const reportApi = {
+  salesActivity(filters, { signal } = {}) {
+    return get(`/api/v1/reports/sales-activity${queryString(filters)}`, {
+      signal,
+    });
+  },
+  salesActivityWarehouses(filters = {}, { signal } = {}) {
+    return get(
+      `/api/v1/reports/sales-activity/warehouses${queryString(filters)}`,
+      { signal },
+    );
+  },
+};
+
 export const inventoryApi = {
   balances(filters = {}) {
     return get(`/api/v1/inventory/balances${queryString(filters)}`);

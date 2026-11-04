@@ -79,6 +79,18 @@ export function RequireAuditAccess() {
   return <Outlet />;
 }
 
+export function RequireSalesActivityAccess() {
+  const { session } = useAuth();
+  const required = ["reports.read", "sales.read", "warehouses.read"];
+  if (
+    !["administrator", "auditor"].includes(session?.user?.role) ||
+    !required.every((permission) => session?.permissions?.includes(permission))
+  ) {
+    return <Navigate to="/acceso-denegado" replace />;
+  }
+  return <Outlet />;
+}
+
 export function RequireUserAdministration() {
   const { session } = useAuth();
   if (

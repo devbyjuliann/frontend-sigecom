@@ -9,6 +9,7 @@ import {
   RequireAuditAccess,
   RequirePermission,
   RequireRoleAdministration,
+  RequireSalesActivityAccess,
   RequireUserAdministration,
 } from "./auth/route-guards.jsx";
 
@@ -51,6 +52,7 @@ const RolesPermissionsPage = lazy(
   () => import("./pages/roles-permissions-page.jsx"),
 );
 const AuditPage = lazy(() => import("./pages/audit-page.jsx"));
+const ReportsPage = lazy(() => import("./pages/sales-activity-page.jsx"));
 const SaleFormPage = lazy(() => import("./pages/sale-form-page.jsx"));
 const SaleDetailPage = lazy(() => import("./pages/sale-detail-page.jsx"));
 
@@ -123,6 +125,11 @@ function AppRoutes() {
           <Route element={<RequireAuditAccess />}>
             <Route element={<AppShell />}>
               <Route path="/auditoria" element={<AuditPage />} />
+            </Route>
+          </Route>
+          <Route element={<RequireSalesActivityAccess />}>
+            <Route element={<AppShell />}>
+              <Route path="/reportes" element={<ReportsPage />} />
             </Route>
           </Route>
           <Route element={<RequirePermission permission="categories.read" />}>

@@ -114,6 +114,14 @@ const navigation = [
     allowedRoles: ["administrator", "auditor"],
     icon: ClockCounterClockwise,
   },
+  {
+    label: "Reportes",
+    path: "/reportes",
+    permission: "reports.read",
+    requiredPermissions: ["reports.read", "sales.read", "warehouses.read"],
+    allowedRoles: ["administrator", "auditor"],
+    icon: ClipboardText,
+  },
 ];
 const profileDestination = {
   label: "Mi perfil",
@@ -127,6 +135,26 @@ const roleNames = {
   warehouse: "Bodega",
   auditor: "Auditor",
 };
+
+export function canSeeNavigationItem(item, session) {
+  if (!session?.user) return false;
+  if (item.administratorOnly && session.user.role !== "administrator")
+    return false;
+  if (item.allowedRoles && !item.allowedRoles.includes(session.user.role))
+    return false;
+  const permissions = session.permissions || [];
+  if (
+    item.requiredPermissions &&
+    !item.requiredPermissions.every((permission) =>
+      permissions.includes(permission),
+    )
+  )
+    return false;
+  const anyPermission = Array.isArray(item.permission)
+    ? item.permission
+    : [item.permission];
+  return anyPermission.some((permission) => permissions.includes(permission));
+}
 
 function Brand({ collapsed = false }) {
   return (
@@ -217,18 +245,8 @@ function SidebarContent({
   showCollapse = true,
 }) {
   const { session } = useAuth();
-  const destinations = navigation.filter(
-    (item) =>
-      (!item.administratorOnly || session.user.role === "administrator") &&
-      (!item.allowedRoles || item.allowedRoles.includes(session.user.role)) &&
-      (!item.requiredPermissions ||
-        item.requiredPermissions.every((permission) =>
-          session.permissions.includes(permission),
-        )) &&
-      (Array.isArray(item.permission)
-        ? item.permission
-        : [item.permission]
-      ).some((permission) => session.permissions.includes(permission)),
+  const destinations = navigation.filter((item) =>
+    canSeeNavigationItem(item, session),
   );
   return (
     <>
@@ -376,9 +394,7 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const destinations = navigation.filter((item) =>
-    (Array.isArray(item.permission) ? item.permission : [item.permission]).some(
-      (permission) => session.permissions.includes(permission),
-    ),
+    canSeeNavigationItem(item, session),
   );
   const searchableDestinations = [
     ...destinations,
@@ -394,9 +410,11 @@ export default function AppShell() {
         ? "Ventas"
         : location.pathname === "/perfil"
           ? "Mi perfil"
-          : location.pathname === "/inventario"
-            ? "Inventario"
-            : "SIGECOM");
+          : location.pathname === "/reportes"
+            ? "Reportes"
+            : location.pathname === "/inventario"
+              ? "Inventario"
+              : "SIGECOM");
   const sidebarWidth = collapsed ? 76 : 248;
 
   return (
