@@ -5321,6 +5321,83 @@ p {
 .activity-pagination > div {
   gap: 8px;
 }
+.reports-hub {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+.reports-hub__selector {
+  display: grid;
+  width: min(100%, 390px);
+  gap: 7px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+}
+.reports-hub__selector select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d5deeb;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+}
+.reports-hub__selector select:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.reports-hub__empty {
+  margin: 0;
+  padding: 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #fff;
+  color: #526078;
+  font-size: 13px;
+}
+.purchase-report-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.purchase-report-coverage,
+.purchase-report-generated {
+  margin: -8px 2px 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.purchase-report-generated {
+  margin-top: -10px;
+  text-align: right;
+}
+.purchase-receipts-report .data-table th,
+.purchase-receipts-report .data-table td {
+  min-width: 120px;
+}
+.purchase-receipts-report .data-table th:nth-child(3),
+.purchase-receipts-report .data-table td:nth-child(3),
+.purchase-receipts-report .data-table th:nth-child(4),
+.purchase-receipts-report .data-table td:nth-child(4) {
+  min-width: 150px;
+}
+@media (max-width: 900px) {
+  .purchase-report-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .purchase-report-metrics .activity-metric:last-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 560px) {
+  .purchase-report-metrics {
+    grid-template-columns: 1fr;
+  }
+  .purchase-report-generated {
+    text-align: left;
+  }
+}
 .activity-state {
   padding: 24px;
   border: 1px solid #e2e8f0;
@@ -5380,9 +5457,15 @@ p {
   }
 }
 @media (max-width: 480px) {
-  .activity-metrics {
+  .activity-metrics:not(.purchase-report-metrics) {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+  }
+  .purchase-report-metrics {
+    grid-template-columns: 1fr;
+  }
+  .purchase-report-metrics .activity-metric:last-child {
+    grid-column: auto;
   }
   .activity-metric {
     padding: 12px;

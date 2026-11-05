@@ -3,7 +3,7 @@ import { canSeeNavigationItem } from "./app-shell.jsx";
 
 const reportNavigation = {
   permission: "reports.read",
-  requiredPermissions: ["reports.read", "sales.read", "warehouses.read"],
+  requiredPermissions: ["reports.read", "warehouses.read"],
   allowedRoles: ["administrator", "auditor"],
 };
 
@@ -36,5 +36,14 @@ describe("Reportes navigation visibility", () => {
         permissions: ["reports.read", "sales.read"],
       }),
     ).toBe(false);
+  });
+
+  it("shows Reports with purchase access even without sales.read", () => {
+    expect(
+      canSeeNavigationItem(reportNavigation, {
+        user: { role: "administrator" },
+        permissions: ["reports.read", "warehouses.read", "purchases.read"],
+      }),
+    ).toBe(true);
   });
 });

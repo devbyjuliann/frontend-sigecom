@@ -118,7 +118,7 @@ const navigation = [
     label: "Reportes",
     path: "/reportes",
     permission: "reports.read",
-    requiredPermissions: ["reports.read", "sales.read", "warehouses.read"],
+    requiredPermissions: ["reports.read", "warehouses.read"],
     allowedRoles: ["administrator", "auditor"],
     icon: ClipboardText,
   },

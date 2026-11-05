@@ -490,6 +490,17 @@ export const reportApi = {
       { signal },
     );
   },
+  purchaseReceipts(filters, { signal } = {}) {
+    return get(`/api/v1/reports/purchase-receipts${queryString(filters)}`, {
+      signal,
+    });
+  },
+  purchaseReceiptWarehouses(filters = {}, { signal } = {}) {
+    return get(
+      `/api/v1/reports/purchase-receipts/warehouses${queryString(filters)}`,
+      { signal },
+    );
+  },
 };
 
 export const inventoryApi = {

@@ -91,6 +91,18 @@ export function RequireSalesActivityAccess() {
   return <Outlet />;
 }
 
+export function RequireReportsAccess() {
+  const { session } = useAuth();
+  const required = ["reports.read", "warehouses.read"];
+  if (
+    !["administrator", "auditor"].includes(session?.user?.role) ||
+    !required.every((permission) => session?.permissions?.includes(permission))
+  ) {
+    return <Navigate to="/acceso-denegado" replace />;
+  }
+  return <Outlet />;
+}
+
 export function RequireUserAdministration() {
   const { session } = useAuth();
   if (

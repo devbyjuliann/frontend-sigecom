@@ -72,8 +72,10 @@ export function formatExactCop(value) {
     return "Importe no disponible";
   }
   const [whole, cents] = value.split(".");
-  const formattedWhole = copIntegerFormatter.format(BigInt(whole));
-  return `${formattedWhole},${cents}`;
+  const integer = BigInt(whole);
+  const formattedWhole = copIntegerFormatter.format(integer);
+  const negativeSubunit = value.startsWith("-") && integer === 0n;
+  return `${negativeSubunit ? "-" : ""}${formattedWhole},${cents}`;
 }
 
 export function formatExactQuantity(value) {

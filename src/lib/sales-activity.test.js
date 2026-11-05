@@ -51,10 +51,21 @@ describe("Sales activity presentation helpers", () => {
     expect(formatExactCop("-9999999999997.85")).toMatch(
       /-.*9\.999\.999\.999\.997,85/,
     );
+    expect(formatExactCop("9007199254740993.25")).toMatch(
+      /9\.007\.199\.254\.740\.993,25/,
+    );
     expect(formatExactCop("1e30")).toBe("Importe no disponible");
     expect(formatExactQuantity("9007199254740993")).toBe(
       "9.007.199.254.740.993",
     );
+  });
+
+  it("preserves the negative sign when a negative COP amount is smaller than one peso", () => {
+    expect(formatExactCop("-0.25")).toMatch(/-.*0,25/);
+    expect(formatExactCop("-0.01")).toMatch(/-.*0,01/);
+    expect(formatExactCop("-10.32")).toMatch(/-.*10,32/);
+    expect(formatExactCop("1234.56")).toMatch(/1\.234,56/);
+    expect(formatExactCop("0.00")).toMatch(/0,00/);
   });
 
   it("calls only the two authorized sales-activity GET endpoints with filters", async () => {
@@ -77,6 +88,35 @@ describe("Sales activity presentation helpers", () => {
     expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
       "/api/v1/reports/sales-activity?dateFrom=2026-01-01&dateTo=2026-01-30&page=1&pageSize=20",
       "/api/v1/reports/sales-activity/warehouses?q=Norte&page=2&pageSize=20",
+    ]);
+    expect(
+      fetchSpy.mock.calls.every(
+        ([, options]) =>
+          options.method === "GET" && options.credentials === "include",
+      ),
+    ).toBe(true);
+  });
+
+  it("calls the purchase report and its own scoped warehouse endpoint", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [], activities: [] }),
+    });
+    await reportApi.purchaseReceipts({
+      dateFrom: "2026-01-01",
+      dateTo: "2026-01-30",
+      page: 1,
+      pageSize: 20,
+    });
+    await reportApi.purchaseReceiptWarehouses({
+      q: "Norte",
+      page: 2,
+      pageSize: 20,
+    });
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      "/api/v1/reports/purchase-receipts?dateFrom=2026-01-01&dateTo=2026-01-30&page=1&pageSize=20",
+      "/api/v1/reports/purchase-receipts/warehouses?q=Norte&page=2&pageSize=20",
     ]);
     expect(
       fetchSpy.mock.calls.every(
