@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/auth-context.jsx";
 import SalesActivityPage from "./sales-activity-page.jsx";
 import PurchaseReceiptsPage from "./purchase-receipts-page.jsx";
+import PurchaseOrdersPage from "./purchase-orders-page.jsx";
 
 function reportChoices(session) {
   const permissions = new Set(session?.permissions || []);
@@ -19,7 +20,10 @@ function reportChoices(session) {
       ? [{ id: "sales", label: "Actividad de Ventas" }]
       : []),
     ...(permissions.has("purchases.read")
-      ? [{ id: "purchases", label: "Recepciones y Devoluciones de Compras" }]
+      ? [
+          { id: "purchases", label: "Recepciones y Devoluciones de Compras" },
+          { id: "purchase-orders", label: "Órdenes de Compra y Pendientes" },
+        ]
       : []),
   ];
 }
@@ -51,6 +55,7 @@ export default function ReportsPage() {
     previousIdentity.current = identity;
     queryClient.removeQueries({ queryKey: ["sales-activity"] });
     queryClient.removeQueries({ queryKey: ["purchase-receipts"] });
+    queryClient.removeQueries({ queryKey: ["purchase-orders-report"] });
     setSelected("");
   }, [identity, queryClient]);
 
@@ -59,9 +64,12 @@ export default function ReportsPage() {
     const old = active;
     setSelected(next);
     if (old && old !== next) {
-      queryClient.removeQueries({
-        queryKey: [old === "sales" ? "sales-activity" : "purchase-receipts"],
-      });
+      const queryKey = {
+        sales: "sales-activity",
+        purchases: "purchase-receipts",
+        "purchase-orders": "purchase-orders-report",
+      }[old];
+      if (queryKey) queryClient.removeQueries({ queryKey: [queryKey] });
     }
   }
 
@@ -89,6 +97,9 @@ export default function ReportsPage() {
       </div>
       {active === "sales" ? <SalesActivityPage key="sales" /> : null}
       {active === "purchases" ? <PurchaseReceiptsPage key="purchases" /> : null}
+      {active === "purchase-orders" ? (
+        <PurchaseOrdersPage key="purchase-orders" />
+      ) : null}
     </section>
   );
 }

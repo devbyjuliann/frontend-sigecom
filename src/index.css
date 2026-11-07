@@ -5326,6 +5326,67 @@ p {
   min-width: 0;
   gap: 14px;
 }
+.purchase-orders-report .activity-report-banner {
+  align-items: flex-start;
+}
+.purchase-orders-report .activity-report-banner p {
+  margin: 5px 0 0;
+  color: #526078;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.purchase-orders-report .activity-metric h3,
+.purchase-orders-breakdowns h3 {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+.purchase-orders-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.purchase-orders-breakdowns > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px 14px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #fff;
+}
+.purchase-orders-breakdowns h3 {
+  flex-basis: 100%;
+  color: #172033;
+  font-size: 12px;
+}
+.purchase-orders-breakdowns span {
+  color: #526078;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.purchase-orders-report .activity-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.purchase-orders-report .activity-pagination span {
+  margin-right: auto;
+}
+.purchase-orders-report .data-table th,
+.purchase-orders-report .data-table td {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .purchase-orders-breakdowns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .reports-hub__selector {
   display: grid;
   width: min(100%, 390px);

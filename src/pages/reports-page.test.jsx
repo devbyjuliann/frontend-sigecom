@@ -14,6 +14,7 @@ vi.mock("../lib/auth-api.js", async (importOriginal) => {
     ...actual,
     reportApi: {
       purchaseReceipts: vi.fn(),
+      purchaseOrders: vi.fn(),
       purchaseReceiptWarehouses: vi.fn(),
       salesActivity: vi.fn(),
       salesActivityWarehouses: vi.fn(),
@@ -75,6 +76,9 @@ it("automatically mounts only Compras when sales.read is absent", async () => {
   expect(
     screen.queryByRole("option", { name: "Actividad de Ventas" }),
   ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: "Órdenes de Compra y Pendientes" }),
+  ).toBeInTheDocument();
 });
 
 it("shows only Actividad de Ventas when purchases.read is absent", async () => {
@@ -150,6 +154,9 @@ it("shows both authorized report types and mounts only the selected report", asy
       name: "Recepciones y Devoluciones de Compras",
     }),
   ).toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: "Órdenes de Compra y Pendientes" }),
+  ).toBeInTheDocument();
   await user.selectOptions(
     screen.getByLabelText("Tipo de reporte"),
     "purchases",
@@ -164,6 +171,37 @@ it("shows both authorized report types and mounts only the selected report", asy
     screen.queryByRole("region", { name: "Tabla de Actividad de Ventas" }),
   ).not.toBeInTheDocument();
   await waitFor(() => expect(reportApi.purchaseReceipts).toHaveBeenCalled());
+  reportApi.purchaseOrders.mockResolvedValue({
+    summary: {
+      verifiedOrders: "0",
+      byDocumentStatus: {},
+      bySituation: {},
+      ordersWithPending: "0",
+      ordersClosedWithRemnant: "0",
+      originalConfirmedOrderValue: "0.00",
+      pendingByUnit: [],
+      closedByUnit: [],
+    },
+    orders: [],
+    pagination: { page: 1, pageSize: 20, total: "0", totalPages: "0" },
+    generatedAt: "2026-01-01T12:00:00.000Z",
+  });
+  await user.selectOptions(
+    screen.getByLabelText("Tipo de reporte"),
+    "purchase-orders",
+  );
+  expect(
+    await screen.findByRole("heading", {
+      name: "Órdenes de Compra y Pendientes",
+    }),
+  ).toBeInTheDocument();
+  await waitFor(() =>
+    expect(reportApi.purchaseOrders).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "pending" }),
+      expect.anything(),
+    ),
+  );
+  expect(reportApi.purchaseReceipts).toHaveBeenCalledTimes(1);
 });
 
 it("does not call commercial endpoints when the user has no specific report permission", () => {

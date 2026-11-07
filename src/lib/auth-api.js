@@ -495,6 +495,11 @@ export const reportApi = {
       signal,
     });
   },
+  purchaseOrders(filters, { signal } = {}) {
+    return get(`/api/v1/reports/purchase-orders${queryString(filters)}`, {
+      signal,
+    });
+  },
   purchaseReceiptWarehouses(filters = {}, { signal } = {}) {
     return get(
       `/api/v1/reports/purchase-receipts/warehouses${queryString(filters)}`,
