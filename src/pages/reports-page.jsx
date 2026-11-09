@@ -4,6 +4,7 @@ import { useAuth } from "../auth/auth-context.jsx";
 import SalesActivityPage from "./sales-activity-page.jsx";
 import PurchaseReceiptsPage from "./purchase-receipts-page.jsx";
 import PurchaseOrdersPage from "./purchase-orders-page.jsx";
+import InventoryReportPage from "./inventory-report-page.jsx";
 
 function reportChoices(session) {
   const permissions = new Set(session?.permissions || []);
@@ -23,6 +24,15 @@ function reportChoices(session) {
       ? [
           { id: "purchases", label: "Recepciones y Devoluciones de Compras" },
           { id: "purchase-orders", label: "Órdenes de Compra y Pendientes" },
+        ]
+      : []),
+    ...(permissions.has("inventory.read") ||
+    permissions.has("inventory.movements.read")
+      ? [
+          {
+            id: "inventory",
+            label: "Resumen de Inventario y Actividad de Bodega",
+          },
         ]
       : []),
   ];
@@ -45,7 +55,9 @@ export default function ReportsPage() {
   const [selected, setSelected] = useState("");
   const firstChoice = choices.some(({ id }) => id === "sales")
     ? "sales"
-    : choices[0]?.id;
+    : choices.some(({ id }) => id === "purchases")
+      ? "purchases"
+      : choices[0]?.id;
   const active = choices.some(({ id }) => id === selected)
     ? selected
     : firstChoice;
@@ -56,6 +68,7 @@ export default function ReportsPage() {
     queryClient.removeQueries({ queryKey: ["sales-activity"] });
     queryClient.removeQueries({ queryKey: ["purchase-receipts"] });
     queryClient.removeQueries({ queryKey: ["purchase-orders-report"] });
+    queryClient.removeQueries({ queryKey: ["inventory-analytics-report"] });
     setSelected("");
   }, [identity, queryClient]);
 
@@ -68,6 +81,7 @@ export default function ReportsPage() {
         sales: "sales-activity",
         purchases: "purchase-receipts",
         "purchase-orders": "purchase-orders-report",
+        inventory: "inventory-analytics-report",
       }[old];
       if (queryKey) queryClient.removeQueries({ queryKey: [queryKey] });
     }
@@ -100,6 +114,7 @@ export default function ReportsPage() {
       {active === "purchase-orders" ? (
         <PurchaseOrdersPage key="purchase-orders" />
       ) : null}
+      {active === "inventory" ? <InventoryReportPage key="inventory" /> : null}
     </section>
   );
 }

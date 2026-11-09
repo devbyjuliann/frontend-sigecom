@@ -506,6 +506,21 @@ export const reportApi = {
       { signal },
     );
   },
+  inventoryBalances(filters, { signal } = {}) {
+    return get(`/api/v1/reports/inventory/balances${queryString(filters)}`, {
+      signal,
+    });
+  },
+  inventoryMovements(filters, { signal } = {}) {
+    return get(`/api/v1/reports/inventory/movements${queryString(filters)}`, {
+      signal,
+    });
+  },
+  inventoryWarehouses(filters = {}, { signal } = {}) {
+    return get(`/api/v1/reports/inventory/warehouses${queryString(filters)}`, {
+      signal,
+    });
+  },
 };
 
 export const inventoryApi = {
