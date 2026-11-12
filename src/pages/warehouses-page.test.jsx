@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import WarehousesPage from "./warehouses-page.jsx";
 import { ApiError, warehousesApi } from "../lib/auth-api.js";
 import { useAuth } from "../auth/auth-context.jsx";
+import { toast } from "sonner";
 
 vi.mock("../lib/auth-api.js", async (importOriginal) => {
   const actual = await importOriginal();
@@ -28,6 +29,9 @@ vi.mock("../lib/auth-api.js", async (importOriginal) => {
 });
 
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}));
 
 const warehouse = {
   id: "42",
@@ -175,5 +179,41 @@ describe("WarehousesPage", () => {
     expect(
       screen.getByRole("button", { name: "Reintentar" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows the pending-purchases conflict, keeps the warehouse active, and allows retry", async () => {
+    const conflictMessage =
+      "No puedes desactivar esta bodega: tiene 2 órdenes de compra confirmadas con cantidades pendientes de recibir.";
+    warehousesApi.setStatus
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 409,
+          code: "WAREHOUSE_HAS_PENDING_PURCHASES",
+          message: conflictMessage,
+        }),
+      )
+      .mockResolvedValueOnce({ ...warehouse, isActive: false });
+
+    renderPage();
+    await screen.findByRole("row", { name: /BOD-42 Bodega central/ });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Desactivar bodega BOD-42" }),
+    );
+    const deactivateButton = screen.getByRole("button", { name: "Desactivar" });
+    fireEvent.click(deactivateButton);
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(conflictMessage),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("Activa")).toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Desactivar" }));
+    await waitFor(() =>
+      expect(warehousesApi.setStatus).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(toast.success).toHaveBeenCalledWith("Bodega desactivada.");
   });
 });
