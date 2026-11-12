@@ -1,8 +1,9 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
-import { Toaster } from "sonner";
-import { AuthProvider } from "./auth/auth-context.jsx";
+import { toast, Toaster } from "sonner";
+import { AuthProvider, useAuth } from "./auth/auth-context.jsx";
+import SessionQueryBoundary from "./auth/session-query-boundary.jsx";
 import {
   RedirectIfAuthenticated,
   RequireAuth,
@@ -203,17 +204,43 @@ function AppRoutes() {
   );
 }
 
+function PendingOperationStorageNotice() {
+  const {
+    discardedPendingOperations,
+    pendingStorageNoticeVersion,
+    sessionScopeKey,
+  } = useAuth();
+
+  useEffect(() => {
+    if (!pendingStorageNoticeVersion && !discardedPendingOperations) return;
+    toast.warning("Se descartó una solicitud pendiente de la sesión anterior", {
+      description:
+        "Antes de repetir una operación, consulta el documento en SIGECOM para confirmar si ya se registró.",
+      duration: 12_000,
+    });
+  }, [
+    discardedPendingOperations,
+    pendingStorageNoticeVersion,
+    sessionScopeKey,
+  ]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
-          <Toaster
-            position="bottom-right"
-            closeButton
-            toastOptions={{ className: "sigecom-toast" }}
-          />
+          <SessionQueryBoundary>
+            <AppRoutes />
+            <PendingOperationStorageNotice />
+            <Toaster
+              position="bottom-right"
+              closeButton
+              toastOptions={{ className: "sigecom-toast" }}
+            />
+          </SessionQueryBoundary>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

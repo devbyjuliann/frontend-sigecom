@@ -11,6 +11,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../auth/auth-context.jsx";
+import {
+  readPendingOperation,
+  writePendingOperation,
+} from "../auth/pending-operation-storage.js";
 import { Button } from "../components/ui/button.jsx";
 import { ApiError, purchasesApi } from "../lib/auth-api.js";
 
@@ -33,36 +37,6 @@ const statusLabels = {
   cancelled: "Cancelada",
 };
 
-function receiptStorageKey(orderId) {
-  return `sigecom.purchase-receipt.pending.${orderId}`;
-}
-
-function closureStorageKey(orderId) {
-  return `sigecom.purchase-closure.pending.${orderId}`;
-}
-
-function returnStorageKey(orderId) {
-  return `sigecom.purchase-return.pending.${orderId}`;
-}
-
-function readPendingReceipt(orderId) {
-  try {
-    const raw = sessionStorage.getItem(receiptStorageKey(orderId));
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function readPendingClosure(orderId) {
-  try {
-    const raw = sessionStorage.getItem(closureStorageKey(orderId));
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function createReceiptKey() {
   return (
     globalThis.crypto?.randomUUID?.() ||
@@ -72,7 +46,7 @@ function createReceiptKey() {
 
 export default function PurchaseDetailPage() {
   const { id } = useParams();
-  const { session } = useAuth();
+  const { session, pendingStorageLease } = useAuth();
   const client = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -93,20 +67,15 @@ export default function PurchaseDetailPage() {
   const [returnReason, setReturnReason] = useState("");
   const [returnQuantities, setReturnQuantities] = useState({});
   const [returnReviewOpen, setReturnReviewOpen] = useState(false);
-  const [pendingReturn, setPendingReturn] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem(returnStorageKey(id));
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [pendingReturn, setPendingReturn] = useState(() =>
+    readPendingOperation(pendingStorageLease, "purchaseReturn", id),
+  );
   const receiptKey = useRef(null);
   const [pendingReceipt, setPendingReceipt] = useState(() =>
-    readPendingReceipt(id),
+    readPendingOperation(pendingStorageLease, "purchaseReceipt", id),
   );
   const [pendingClosure, setPendingClosure] = useState(() =>
-    readPendingClosure(id),
+    readPendingOperation(pendingStorageLease, "purchaseClosure", id),
   );
   const order = useQuery({
     queryKey: ["purchase-order", id],
@@ -159,14 +128,12 @@ export default function PurchaseDetailPage() {
                 })),
             },
           };
-          try {
-            sessionStorage.setItem(
-              returnStorageKey(id),
-              JSON.stringify(request),
-            );
-          } catch {
-            /* In-memory retry retains the request. */
-          }
+          writePendingOperation(
+            pendingStorageLease,
+            "purchaseReturn",
+            id,
+            request,
+          );
           setPendingReturn(request);
           return request;
         })();
@@ -179,11 +146,7 @@ export default function PurchaseDetailPage() {
     },
     onSuccess: async (result) => {
       setPendingReturn(null);
-      try {
-        sessionStorage.removeItem(returnStorageKey(id));
-      } catch {
-        /* Ignore unavailable storage. */
-      }
+      writePendingOperation(pendingStorageLease, "purchaseReturn", id, null);
       setReturnReviewOpen(false);
       setReturnReceipt(null);
       setReturnReference("");
@@ -209,11 +172,7 @@ export default function PurchaseDetailPage() {
       }
       if (error.status >= 400 && error.status < 500 && error.status !== 408) {
         setPendingReturn(null);
-        try {
-          sessionStorage.removeItem(returnStorageKey(id));
-        } catch {
-          // Ignore unavailable browser storage.
-        }
+        writePendingOperation(pendingStorageLease, "purchaseReturn", id, null);
       }
       toast.error(
         error.message ||
@@ -301,16 +260,16 @@ export default function PurchaseDetailPage() {
         };
         receiptKey.current = key;
         setPendingReceipt(request);
-        try {
-          sessionStorage.setItem(
-            receiptStorageKey(id),
-            JSON.stringify(request),
-          );
-        } catch {
-          // The current page still retains the same key for in-session retries.
-        }
+        writePendingOperation(
+          pendingStorageLease,
+          "purchaseReceipt",
+          id,
+          request,
+        );
       }
-      const request = pendingReceipt || readPendingReceipt(id);
+      const request =
+        pendingReceipt ||
+        readPendingOperation(pendingStorageLease, "purchaseReceipt", id);
       const retry = request || {
         key: receiptKey.current,
         input: {
@@ -330,11 +289,7 @@ export default function PurchaseDetailPage() {
     onSuccess: async (result) => {
       receiptKey.current = null;
       setPendingReceipt(null);
-      try {
-        sessionStorage.removeItem(receiptStorageKey(id));
-      } catch {
-        // Ignore unavailable browser storage; the server remains authoritative.
-      }
+      writePendingOperation(pendingStorageLease, "purchaseReceipt", id, null);
       setReceiptReviewOpen(false);
       setReceiptOpen(false);
       setReceiptReference("");
@@ -360,18 +315,16 @@ export default function PurchaseDetailPage() {
       if (error.status >= 400 && error.status < 500 && error.status !== 408) {
         receiptKey.current = null;
         setPendingReceipt(null);
-        try {
-          sessionStorage.removeItem(receiptStorageKey(id));
-        } catch {
-          // Ignore unavailable browser storage.
-        }
+        writePendingOperation(pendingStorageLease, "purchaseReceipt", id, null);
       }
       toast.error(error.message || "No se pudo confirmar la recepción.");
     },
   });
   const close = useMutation({
     mutationFn: () => {
-      const saved = pendingClosure || readPendingClosure(id);
+      const saved =
+        pendingClosure ||
+        readPendingOperation(pendingStorageLease, "purchaseClosure", id);
       const request = saved || {
         key: createReceiptKey(),
         input: {
@@ -381,24 +334,18 @@ export default function PurchaseDetailPage() {
       };
       if (!saved) {
         setPendingClosure(request);
-        try {
-          sessionStorage.setItem(
-            closureStorageKey(id),
-            JSON.stringify(request),
-          );
-        } catch {
-          // The current page retains the request for in-session retries.
-        }
+        writePendingOperation(
+          pendingStorageLease,
+          "purchaseClosure",
+          id,
+          request,
+        );
       }
       return purchasesApi.close(id, request.input, request.key);
     },
     onSuccess: async (updated) => {
       setPendingClosure(null);
-      try {
-        sessionStorage.removeItem(closureStorageKey(id));
-      } catch {
-        // Ignore unavailable browser storage; the server remains authoritative.
-      }
+      writePendingOperation(pendingStorageLease, "purchaseClosure", id, null);
       setClosureOpen(false);
       setClosureReviewOpen(false);
       await refresh(updated);
@@ -415,11 +362,7 @@ export default function PurchaseDetailPage() {
     onError: (error) => {
       if (error.status >= 400 && error.status < 500 && error.status !== 408) {
         setPendingClosure(null);
-        try {
-          sessionStorage.removeItem(closureStorageKey(id));
-        } catch {
-          // Ignore unavailable browser storage.
-        }
+        writePendingOperation(pendingStorageLease, "purchaseClosure", id, null);
       }
       toast.error(
         error.message || "No se pudieron cerrar las cantidades pendientes.",

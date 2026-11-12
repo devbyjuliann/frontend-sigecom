@@ -13,6 +13,10 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import SaleDetailPage from "./sale-detail-page.jsx";
 import { salesApi } from "../lib/auth-api.js";
 import { useAuth } from "../auth/auth-context.jsx";
+import {
+  activatePendingOperationStorage,
+  clearPendingOperationStorage,
+} from "../auth/pending-operation-storage.js";
 
 vi.mock("../lib/auth-api.js", () => ({
   salesApi: {
@@ -74,6 +78,11 @@ function renderDetail(
       permissions,
       warehouseIds: ["1"],
     },
+    pendingStorageLease: activatePendingOperationStorage({
+      user: { id: "5", role: "administrator" },
+      permissions,
+      warehouseIds: ["1"],
+    }).lease,
   });
   salesApi.get.mockResolvedValue(sale);
   salesApi.returns.mockResolvedValue({ items: [] });
@@ -104,6 +113,8 @@ function renderDetail(
 describe("SaleDetailPage", () => {
   afterEach(() => {
     cleanup();
+    clearPendingOperationStorage();
+    sessionStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -216,6 +227,41 @@ describe("SaleDetailPage", () => {
     expect(salesApi.confirm.mock.calls[0][2]).toBe(
       salesApi.confirm.mock.calls[1][2],
     );
+  });
+
+  it("does not restore a legacy customer-return draft into the current account", async () => {
+    sessionStorage.setItem(
+      "sigecom.customer-return.pending.12",
+      JSON.stringify({
+        key: "legacy-account-a-key",
+        input: {
+          reference: "PRIVADO-DE-A",
+          reason: "Motivo privado de A",
+          physicalObservation: "Observación privada de A",
+          receivedPhysical: true,
+          inspected: true,
+          lines: [{ saleLineId: "121", quantityReceived: 1 }],
+        },
+        lines: { 121: { selected: true, quantityReceived: "1" } },
+      }),
+    );
+    renderDetail(["sales.read", "sales.return"], {
+      ...draft,
+      status: "confirmed",
+      warehouseIsActive: true,
+      confirmedAt: "2026-10-30T12:10:00.000Z",
+    });
+
+    await userEvent
+      .setup()
+      .click(
+        await screen.findByRole("button", { name: /registrar devolución/i }),
+      );
+
+    expect(screen.getByLabelText("Referencia")).toHaveValue("");
+    expect(
+      screen.queryByDisplayValue("Motivo privado de A"),
+    ).not.toBeInTheDocument();
   });
 
   it("requires physical declarations and review before reversing a confirmed sale", async () => {

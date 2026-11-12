@@ -136,9 +136,6 @@ export default function SalesActivityPage() {
         : "Tu sesión ya no tiene permisos para consultar Actividad de Ventas.",
     );
     queryClient.removeQueries({ queryKey: ["sales-activity"] });
-    if (denied.status === 401) {
-      void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-    }
   }, [activityQuery.error, queryClient, warehouseQuery.error]);
 
   const warehouses = warehouseQuery.data?.items || [];

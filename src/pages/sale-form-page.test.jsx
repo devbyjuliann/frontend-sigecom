@@ -10,6 +10,11 @@ import {
   salesApi,
   warehousesApi,
 } from "../lib/auth-api.js";
+import { useAuth } from "../auth/auth-context.jsx";
+import {
+  activatePendingOperationStorage,
+  clearPendingOperationStorage,
+} from "../auth/pending-operation-storage.js";
 
 vi.mock("../lib/auth-api.js", () => ({
   ApiError: class ApiError extends Error {},
@@ -18,8 +23,18 @@ vi.mock("../lib/auth-api.js", () => ({
   salesApi: { get: vi.fn(), create: vi.fn(), update: vi.fn() },
   warehousesApi: { list: vi.fn() },
 }));
+vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
 
 function renderForm() {
+  const session = {
+    user: { id: "seller-A", role: "seller", passwordChangeRequired: false },
+    permissions: ["sales.create", "sales.read"],
+    warehouseIds: ["8"],
+  };
+  useAuth.mockReturnValue({
+    session,
+    pendingStorageLease: activatePendingOperationStorage(session).lease,
+  });
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -70,6 +85,8 @@ function renderForm() {
 describe("SaleFormPage", () => {
   afterEach(() => {
     cleanup();
+    clearPendingOperationStorage();
+    sessionStorage.clear();
     vi.clearAllMocks();
   });
 

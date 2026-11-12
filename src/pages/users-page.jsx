@@ -56,7 +56,7 @@ function queryNumber(value, fallback, maximum) {
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { session } = useAuth();
+  const { session, reloadSession } = useAuth();
   const isAdministrator = session.user.role === "administrator";
   const canManage =
     isAdministrator &&
@@ -330,7 +330,7 @@ export default function UsersPage() {
         editing.id === session.user.id &&
         (input.email || input.roleCode || input.warehouseChanges)
       ) {
-        await queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+        await reloadSession();
       }
     } catch (error) {
       if (error instanceof ApiError && error.code === "USER_EMAIL_TAKEN") {

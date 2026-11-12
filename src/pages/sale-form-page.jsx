@@ -13,8 +13,13 @@ import { useForm, useWatch } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useAuth } from "../auth/auth-context.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
+import {
+  readPendingOperation,
+  writePendingOperation,
+} from "../auth/pending-operation-storage.js";
 import {
   ApiError,
   customersApi,
@@ -104,31 +109,9 @@ function newKey() {
   );
 }
 
-function pendingStorageKey(id) {
-  return `sigecom.sale-draft.pending.${id || "new"}`;
-}
-
-function readPendingWrite(id) {
-  try {
-    const value = sessionStorage.getItem(pendingStorageKey(id));
-    return value ? JSON.parse(value) : null;
-  } catch {
-    return null;
-  }
-}
-
-function storePendingWrite(id, value) {
-  try {
-    if (value)
-      sessionStorage.setItem(pendingStorageKey(id), JSON.stringify(value));
-    else sessionStorage.removeItem(pendingStorageKey(id));
-  } catch {
-    // Keep the request in memory if browser storage is unavailable.
-  }
-}
-
 export default function SaleFormPage() {
   const { id } = useParams();
+  const { pendingStorageLease } = useAuth();
   const editing = Boolean(id);
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -136,7 +119,9 @@ export default function SaleFormPage() {
   const [customerPage, setCustomerPage] = useState(1);
   const [productSearch, setProductSearch] = useState("");
   const [productPage, setProductPage] = useState(1);
-  const pendingWrite = useRef(readPendingWrite(id));
+  const pendingWrite = useRef(
+    readPendingOperation(pendingStorageLease, "saleDraft", id),
+  );
   const saleQuery = useQuery({
     queryKey: ["sale", id],
     queryFn: () => salesApi.get(id),
@@ -311,7 +296,12 @@ export default function SaleFormPage() {
         pendingWrite.current.fingerprint !== fingerprint
       ) {
         pendingWrite.current = { key: newKey(), fingerprint };
-        storePendingWrite(id, pendingWrite.current);
+        writePendingOperation(
+          pendingStorageLease,
+          "saleDraft",
+          id,
+          pendingWrite.current,
+        );
       }
       const { key } = pendingWrite.current;
       return editing
@@ -320,7 +310,7 @@ export default function SaleFormPage() {
     },
     onSuccess: async (sale) => {
       pendingWrite.current = null;
-      storePendingWrite(id, null);
+      writePendingOperation(pendingStorageLease, "saleDraft", id, null);
       await client.invalidateQueries({ queryKey: ["sales"] });
       await client.setQueryData(["sale", sale.id], sale);
       toast.success(editing ? "Borrador actualizado." : "Borrador guardado.");
@@ -334,7 +324,7 @@ export default function SaleFormPage() {
         error.status !== 408
       ) {
         pendingWrite.current = null;
-        storePendingWrite(id, null);
+        writePendingOperation(pendingStorageLease, "saleDraft", id, null);
       }
       toast.error(
         error instanceof ApiError

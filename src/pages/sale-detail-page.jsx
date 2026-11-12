@@ -9,6 +9,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../auth/auth-context.jsx";
+import {
+  readPendingOperation,
+  writePendingOperation,
+} from "../auth/pending-operation-storage.js";
 import { Button } from "../components/ui/button.jsx";
 import { salesApi } from "../lib/auth-api.js";
 
@@ -37,108 +41,21 @@ function makeKey() {
   );
 }
 
-function confirmationStorageKey(id) {
-  return `sigecom.sale-confirmation.pending.${id}`;
-}
-
-function readPendingConfirmation(id) {
-  try {
-    const value = sessionStorage.getItem(confirmationStorageKey(id));
-    return value ? JSON.parse(value) : null;
-  } catch {
-    return null;
-  }
-}
-
-function storePendingConfirmation(id, value) {
-  try {
-    if (value)
-      sessionStorage.setItem(confirmationStorageKey(id), JSON.stringify(value));
-    else sessionStorage.removeItem(confirmationStorageKey(id));
-  } catch {
-    // Keep the request in memory if browser storage is unavailable.
-  }
-}
-
-function cancellationStorageKey(id) {
-  return `sigecom.sale-cancellation.pending.${id}`;
-}
-
-function readPendingCancellation(id) {
-  try {
-    const value = sessionStorage.getItem(cancellationStorageKey(id));
-    return value ? JSON.parse(value) : null;
-  } catch {
-    return null;
-  }
-}
-
-function storePendingCancellation(id, value) {
-  try {
-    if (value)
-      sessionStorage.setItem(cancellationStorageKey(id), JSON.stringify(value));
-    else sessionStorage.removeItem(cancellationStorageKey(id));
-  } catch {
-    // Keep the request in memory if browser storage is unavailable.
-  }
-}
-
-function reversalStorageKey(id) {
-  return `sigecom.sale-reversal.pending.${id}`;
-}
-
-function readPendingReversal(id) {
-  try {
-    const value = sessionStorage.getItem(reversalStorageKey(id));
-    return value ? JSON.parse(value) : null;
-  } catch {
-    return null;
-  }
-}
-
-function storePendingReversal(id, value) {
-  try {
-    if (value)
-      sessionStorage.setItem(reversalStorageKey(id), JSON.stringify(value));
-    else sessionStorage.removeItem(reversalStorageKey(id));
-  } catch {
-    // Keep the request in memory if browser storage is unavailable.
-  }
-}
-
-function customerReturnStorageKey(id) {
-  return `sigecom.customer-return.pending.${id}`;
-}
-function readPendingCustomerReturn(id) {
-  try {
-    const value = sessionStorage.getItem(customerReturnStorageKey(id));
-    return value ? JSON.parse(value) : null;
-  } catch {
-    return null;
-  }
-}
-function storePendingCustomerReturn(id, value) {
-  try {
-    if (value)
-      sessionStorage.setItem(
-        customerReturnStorageKey(id),
-        JSON.stringify(value),
-      );
-    else sessionStorage.removeItem(customerReturnStorageKey(id));
-  } catch {
-    /* Keep the request in memory if browser storage is unavailable. */
-  }
-}
-
 export default function SaleDetailPage() {
   const { id } = useParams();
-  const { session } = useAuth();
+  const { session, pendingStorageLease } = useAuth();
   const client = useQueryClient();
-  const [savedCancellation] = useState(() => readPendingCancellation(id));
+  const [savedCancellation] = useState(() =>
+    readPendingOperation(pendingStorageLease, "saleCancellation", id),
+  );
   const pendingCancellation = useRef(savedCancellation);
-  const [savedReversal] = useState(() => readPendingReversal(id));
+  const [savedReversal] = useState(() =>
+    readPendingOperation(pendingStorageLease, "saleReversal", id),
+  );
   const pendingReversal = useRef(savedReversal);
-  const [savedCustomerReturn] = useState(() => readPendingCustomerReturn(id));
+  const [savedCustomerReturn] = useState(() =>
+    readPendingOperation(pendingStorageLease, "customerReturn", id),
+  );
   const pendingCustomerReturn = useRef(savedCustomerReturn);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReview, setReturnReview] = useState(false);
@@ -178,7 +95,9 @@ export default function SaleDetailPage() {
   const [reversalOpen, setReversalOpen] = useState(false);
   const [reversalReview, setReversalReview] = useState(false);
   const [reversalError, setReversalError] = useState("");
-  const [savedConfirmation] = useState(() => readPendingConfirmation(id));
+  const [savedConfirmation] = useState(() =>
+    readPendingOperation(pendingStorageLease, "saleConfirmation", id),
+  );
   const pendingConfirmation = useRef(savedConfirmation);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmationError, setConfirmationError] = useState("");
@@ -239,13 +158,18 @@ export default function SaleDetailPage() {
           fingerprint,
           reason: body.reason,
         };
-        storePendingCancellation(id, pendingCancellation.current);
+        writePendingOperation(
+          pendingStorageLease,
+          "saleCancellation",
+          id,
+          pendingCancellation.current,
+        );
       }
       return salesApi.cancel(id, body, pendingCancellation.current.key);
     },
     onSuccess: async (updated) => {
       pendingCancellation.current = null;
-      storePendingCancellation(id, null);
+      writePendingOperation(pendingStorageLease, "saleCancellation", id, null);
       await client.setQueryData(["sale", id], updated);
       await client.invalidateQueries({ queryKey: ["sales"] });
       setCancelOpen(false);
@@ -260,7 +184,12 @@ export default function SaleDetailPage() {
         error.status !== 408
       ) {
         pendingCancellation.current = null;
-        storePendingCancellation(id, null);
+        writePendingOperation(
+          pendingStorageLease,
+          "saleCancellation",
+          id,
+          null,
+        );
       }
       toast.error(error.message || "No se pudo cancelar el borrador.");
     },
@@ -274,14 +203,19 @@ export default function SaleDetailPage() {
         pendingConfirmation.current.fingerprint !== fingerprint
       ) {
         pendingConfirmation.current = { key: makeKey(), fingerprint };
-        storePendingConfirmation(id, pendingConfirmation.current);
+        writePendingOperation(
+          pendingStorageLease,
+          "saleConfirmation",
+          id,
+          pendingConfirmation.current,
+        );
       }
       setConfirmationError("");
       return salesApi.confirm(id, body, pendingConfirmation.current.key);
     },
     onSuccess: async (updated) => {
       pendingConfirmation.current = null;
-      storePendingConfirmation(id, null);
+      writePendingOperation(pendingStorageLease, "saleConfirmation", id, null);
       await client.setQueryData(["sale", id], updated);
       await Promise.all([
         client.invalidateQueries({ queryKey: ["sales"] }),
@@ -302,7 +236,12 @@ export default function SaleDetailPage() {
         error.status !== 408
       ) {
         pendingConfirmation.current = null;
-        storePendingConfirmation(id, null);
+        writePendingOperation(
+          pendingStorageLease,
+          "saleConfirmation",
+          id,
+          null,
+        );
       }
     },
   });
@@ -321,14 +260,19 @@ export default function SaleDetailPage() {
         pendingReversal.current.fingerprint !== fingerprint
       ) {
         pendingReversal.current = { key: makeKey(), fingerprint, input: body };
-        storePendingReversal(id, pendingReversal.current);
+        writePendingOperation(
+          pendingStorageLease,
+          "saleReversal",
+          id,
+          pendingReversal.current,
+        );
       }
       setReversalError("");
       return salesApi.reverse(id, body, pendingReversal.current.key);
     },
     onSuccess: async ({ sale: updatedSale, reversal: document }) => {
       pendingReversal.current = null;
-      storePendingReversal(id, null);
+      writePendingOperation(pendingStorageLease, "saleReversal", id, null);
       client.setQueryData(["sale", id], updatedSale);
       client.setQueryData(["sale-reversal", id], document);
       await Promise.all([
@@ -350,7 +294,7 @@ export default function SaleDetailPage() {
         error.status !== 408
       ) {
         pendingReversal.current = null;
-        storePendingReversal(id, null);
+        writePendingOperation(pendingStorageLease, "saleReversal", id, null);
       }
     },
   });
@@ -393,7 +337,12 @@ export default function SaleDetailPage() {
           input: body,
           lines: returnLines,
         };
-        storePendingCustomerReturn(id, pendingCustomerReturn.current);
+        writePendingOperation(
+          pendingStorageLease,
+          "customerReturn",
+          id,
+          pendingCustomerReturn.current,
+        );
       }
       setReturnError("");
       return salesApi.createReturn(id, body, pendingCustomerReturn.current.key);
@@ -403,7 +352,7 @@ export default function SaleDetailPage() {
       customerReturn: customerReturnDocument,
     }) => {
       pendingCustomerReturn.current = null;
-      storePendingCustomerReturn(id, null);
+      writePendingOperation(pendingStorageLease, "customerReturn", id, null);
       client.setQueryData(["sale", id], updated);
       await Promise.all([
         client.invalidateQueries({ queryKey: ["sale-returns", id] }),
@@ -424,7 +373,7 @@ export default function SaleDetailPage() {
       setReturnError(error.message || "No se pudo registrar la devolución.");
       if (error.status >= 400 && error.status < 500 && error.status !== 408) {
         pendingCustomerReturn.current = null;
-        storePendingCustomerReturn(id, null);
+        writePendingOperation(pendingStorageLease, "customerReturn", id, null);
       }
     },
   });

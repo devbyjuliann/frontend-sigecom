@@ -135,8 +135,6 @@ export default function PurchaseReceiptsPage() {
         : "Tu sesión ya no tiene permisos para consultar Recepciones y Devoluciones de Compras.",
     );
     queryClient.removeQueries({ queryKey: ["purchase-receipts"] });
-    if (denied.status === 401)
-      void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
   }, [activityQuery.error, queryClient, warehouseQuery.error]);
 
   const warehouses = warehouseQuery.data?.items || [];

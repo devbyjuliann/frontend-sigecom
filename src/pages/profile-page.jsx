@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
-import { authQueryKey, useAuth } from "../auth/auth-context.jsx";
+import { useAuth } from "../auth/auth-context.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
 import PasswordChangeForm from "../components/password-change-form.jsx";
@@ -19,7 +19,8 @@ const roles = {
 export default function ProfilePage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { session, changePassword, isChangingPassword } = useAuth();
+  const { session, changePassword, isChangingPassword, updateSession } =
+    useAuth();
   const [profileMessage, setProfileMessage] = useState("");
   const profileQuery = useQuery({
     queryKey: profileQueryKey,
@@ -34,14 +35,10 @@ export default function ProfilePage() {
     mutationFn: authApi.updateProfile,
     onSuccess: (profile) => {
       queryClient.setQueryData(profileQueryKey, profile);
-      queryClient.setQueryData(authQueryKey, (current) =>
-        current
-          ? {
-              ...current,
-              user: { ...current.user, displayName: profile.displayName },
-            }
-          : current,
-      );
+      updateSession((current) => ({
+        ...current,
+        user: { ...current.user, displayName: profile.displayName },
+      }));
       setProfileMessage("Tus datos personales se guardaron.");
     },
   });

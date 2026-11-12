@@ -8,7 +8,7 @@ import { ClockCounterClockwise } from "@phosphor-icons/react/ClockCounterClockwi
 import { Funnel } from "@phosphor-icons/react/Funnel";
 import { X } from "@phosphor-icons/react/X";
 import { Button } from "../components/ui/button.jsx";
-import { authQueryKey, useAuth } from "../auth/auth-context.jsx";
+import { useAuth } from "../auth/auth-context.jsx";
 import { ApiError, auditApi } from "../lib/auth-api.js";
 
 const PAGE_SIZE = 20;
@@ -564,7 +564,6 @@ export default function AuditPage() {
     queryClient.removeQueries({
       predicate: (query) => query.queryKey[0] === "audit-events",
     });
-    void queryClient.invalidateQueries({ queryKey: authQueryKey });
   }, [queryClient]);
 
   const reportAuthorizationFailure = useCallback((error) => {

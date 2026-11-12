@@ -12,6 +12,10 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PurchaseDetailPage from "./purchase-detail-page.jsx";
 import { purchasesApi } from "../lib/auth-api.js";
 import { useAuth } from "../auth/auth-context.jsx";
+import {
+  activatePendingOperationStorage,
+  clearPendingOperationStorage,
+} from "../auth/pending-operation-storage.js";
 
 vi.mock("../lib/auth-api.js", () => ({
   ApiError: class ApiError extends Error {},
@@ -39,18 +43,20 @@ function renderPage(
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  const session = {
+    user: { role: "administrator", ...sessionOverrides.user },
+    permissions: [
+      "purchases.read",
+      "purchases.receive",
+      "purchases.create",
+      "purchases.close",
+      ...(sessionOverrides.returnPermission ? ["purchases.return"] : []),
+    ],
+    ...sessionOverrides,
+  };
   useAuth.mockReturnValue({
-    session: {
-      user: { role: "administrator", ...sessionOverrides.user },
-      permissions: [
-        "purchases.read",
-        "purchases.receive",
-        "purchases.create",
-        "purchases.close",
-        ...(sessionOverrides.returnPermission ? ["purchases.return"] : []),
-      ],
-      ...sessionOverrides,
-    },
+    session,
+    pendingStorageLease: activatePendingOperationStorage(session).lease,
   });
   purchasesApi.get.mockResolvedValue({
     id: "12",
@@ -94,7 +100,30 @@ function renderPage(
 describe("PurchaseDetailPage receipts", () => {
   afterEach(() => {
     cleanup();
+    clearPendingOperationStorage();
+    sessionStorage.clear();
     vi.clearAllMocks();
+  });
+
+  it("does not restore another account's legacy receipt request on a shared order", async () => {
+    sessionStorage.setItem(
+      "sigecom.purchase-receipt.pending.12",
+      JSON.stringify({
+        key: "legacy-account-a-key",
+        input: {
+          expectedVersion: 3,
+          reference: "PRIVADO-DE-A",
+          notes: "Notas privadas de A",
+          lines: [{ purchaseOrderLineId: "31", quantity: 2 }],
+        },
+      }),
+    );
+
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Recepciones de mercancía" });
+    expect(screen.queryByText(/PRIVADO-DE-A/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Notas privadas de A/)).not.toBeInTheDocument();
   });
 
   it("shows ordered, received and pending quantities and requires a review", async () => {

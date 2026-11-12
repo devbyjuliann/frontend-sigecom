@@ -209,8 +209,6 @@ export default function PurchaseOrdersPage() {
     );
     queryClient.removeQueries({ queryKey: [queryRoot] });
     setExpanded(new Set());
-    if (denied.status === 401)
-      void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
   }, [warehouseQuery.error, reportQuery.error, queryClient]);
 
   const result = accessIssue ? null : reportQuery.data;
