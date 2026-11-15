@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowClockwise } from "@phosphor-icons/react/ArrowClockwise";
 import { ChartBarHorizontal } from "@phosphor-icons/react/ChartBarHorizontal";
 import { Package } from "@phosphor-icons/react/Package";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
+import { createCsv, downloadCsv } from "../lib/csv.js";
+import { fetchAllReportRows } from "../lib/csv-export.js";
 import DataTable from "../components/data-table.jsx";
 import { useAuth } from "../auth/auth-context.jsx";
 import { ApiError, reportApi } from "../lib/auth-api.js";
@@ -307,6 +309,13 @@ export default function InventoryReportPage() {
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
   const [validationError, setValidationError] = useState("");
   const [accessIssue, setAccessIssue] = useState("");
+  const identityRef = useRef(identity);
+  useLayoutEffect(() => {
+    identityRef.current = identity;
+  }, [identity]);
+  const exportController = useRef(null);
+  const [exportError, setExportError] = useState("");
+  const [exporting, setExporting] = useState(false);
   const previousIdentity = useRef(identity);
   const permissionsKey = [...(session?.permissions || [])].sort().join(",");
   const permitted = views.includes(view);
@@ -314,6 +323,7 @@ export default function InventoryReportPage() {
   useEffect(() => {
     if (previousIdentity.current === identity) return;
     previousIdentity.current = identity;
+    exportController.current?.abort();
     queryClient.removeQueries({ queryKey: [queryRoot] });
     setFilterState(stateFor(identity, initialView));
     setWarehouseSearchDraft("");
@@ -617,6 +627,94 @@ export default function InventoryReportPage() {
   function refresh() {
     void reportQuery.refetch();
     void warehouseQuery.refetch();
+  }
+
+  async function exportCurrentPage() {
+    exportController.current?.abort();
+    const controller = new AbortController();
+    exportController.current = controller;
+    setExporting(true);
+    setExportError("");
+    try {
+      const groupsToExport = await fetchAllReportRows({
+        fetchPage: (filters, options) =>
+          view === "balances"
+            ? reportApi.inventoryBalances(filters, options)
+            : reportApi.inventoryMovements(filters, options),
+        filters: Object.fromEntries(
+          Object.entries(requestFilters).filter(
+            ([key]) => !["page", "pageSize"].includes(key),
+          ),
+        ),
+        pageSize: 50,
+        identity,
+        getCurrentIdentity: () => identityRef.current,
+        signal: controller.signal,
+        rowsKey: "groups",
+      });
+      const columns =
+        view === "balances"
+          ? [
+              { key: "warehouse", label: "Bodega" },
+              { key: "unit", label: "Unidad histórica" },
+              { key: "quantity", label: "Cantidad verificada", type: "number" },
+              {
+                key: "verifiedPairs",
+                label: "Pares verificables",
+                type: "number",
+              },
+              {
+                key: "excludedPairs",
+                label: "Pares no verificables",
+                type: "number",
+              },
+            ]
+          : [
+              { key: "warehouse", label: "Bodega" },
+              { key: "operationType", label: "Tipo de operación" },
+              { key: "unit", label: "Unidad histórica" },
+              {
+                key: "verifiedMovements",
+                label: "Movimientos verificables",
+                type: "number",
+              },
+              { key: "entries", label: "Entradas", type: "number" },
+              { key: "exits", label: "Salidas", type: "number" },
+              { key: "netChange", label: "Diferencia física", type: "number" },
+            ];
+      const rows = groupsToExport.map((group) => ({
+        warehouse: `${group.warehouseCode} · ${group.warehouseName}${group.warehouseActive ? "" : " · Inactiva"}`,
+        unit: group.unit,
+        quantity: positiveCount(group.verifiedPairs)
+          ? group.quantity
+          : "Saldo no verificable",
+        verifiedPairs: group.verifiedPairs,
+        excludedPairs: group.excludedPairs,
+        operationType:
+          inventoryOperationLabels[group.operationType] || group.operationType,
+        verifiedMovements: group.verifiedMovements,
+        entries: group.entries,
+        exits: group.exits,
+        netChange: group.netChange,
+      }));
+      const date = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Bogota",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      downloadCsv(
+        `inventario-${view}-completo-${date}.csv`,
+        createCsv(rows, columns),
+      );
+    } catch (error) {
+      if (error.name !== "AbortError")
+        setExportError(error.message || "No fue posible exportar el reporte.");
+    } finally {
+      if (exportController.current === controller)
+        exportController.current = null;
+      setExporting(false);
+    }
   }
 
   if (!permitted) return null;
@@ -1070,7 +1168,22 @@ export default function InventoryReportPage() {
                     : "Entradas, salidas y diferencia se resumen en unidades independientes, para todo el período y no solo esta página."}
                 </p>
               </div>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={exportCurrentPage}
+                disabled={
+                  groups.length === 0 || exporting || Boolean(deniedMessage)
+                }
+              >
+                {exporting ? "Preparando CSV…" : "Exportar resultados (CSV)"}
+              </Button>
             </div>
+            {exportError ? (
+              <p className="form-error" role="alert">
+                {exportError}
+              </p>
+            ) : null}
             <UnitBreakdown units={summary?.units} view={view} />
           </section>
 

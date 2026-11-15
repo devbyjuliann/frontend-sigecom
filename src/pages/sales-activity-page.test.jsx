@@ -12,6 +12,7 @@ import SalesActivityPage from "./sales-activity-page.jsx";
 import { useAuth } from "../auth/auth-context.jsx";
 import { reportApi } from "../lib/auth-api.js";
 import { ApiError } from "../lib/auth-api.js";
+import { createCsv, downloadCsv } from "../lib/csv.js";
 
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
 vi.mock("../lib/auth-api.js", async (importOriginal) => {
@@ -21,6 +22,10 @@ vi.mock("../lib/auth-api.js", async (importOriginal) => {
     reportApi: { salesActivity: vi.fn(), salesActivityWarehouses: vi.fn() },
   };
 });
+vi.mock("../lib/csv.js", () => ({
+  createCsv: vi.fn(() => "csv-content"),
+  downloadCsv: vi.fn(),
+}));
 
 const activityResponse = (page = 1) => ({
   period: {
@@ -111,6 +116,41 @@ afterEach(() => {
 });
 
 describe("Sales activity report page", () => {
+  it("exports all filtered commercial activity within the explicit cap", async () => {
+    renderPage();
+    await screen.findByRole("region", { name: "Tabla de Actividad de Ventas" });
+    reportApi.salesActivity.mockResolvedValueOnce({
+      ...activityResponse(1),
+      pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Exportar resultados (CSV)" }),
+    );
+
+    await waitFor(() =>
+      expect(createCsv).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            document: "V-0007 · Devolución 9223372036854775807",
+            warehouse: "BOD-1 · Bodega Norte",
+            amount: "10.25",
+          }),
+        ],
+        expect.arrayContaining([
+          expect.objectContaining({ label: "Fecha" }),
+          expect.objectContaining({ label: "Tipo de actividad" }),
+        ]),
+      ),
+    );
+    expect(downloadCsv).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^actividad-ventas-completa-\d{4}-\d{2}-\d{2}\.csv$/,
+      ),
+      "csv-content",
+    );
+  });
+
   it("shows the 30-day Bogotá range, exact money, commercial clarifications, and unit-separated return quantities", async () => {
     renderPage();
     await screen.findByRole("region", { name: "Tabla de Actividad de Ventas" });

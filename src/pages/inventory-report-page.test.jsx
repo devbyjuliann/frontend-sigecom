@@ -168,6 +168,9 @@ const movements = {
   generatedAt: "2026-01-30T15:00:00.000Z",
 };
 
+let originalCreateObjectUrl;
+let originalRevokeObjectUrl;
+
 function renderPage(
   permissions = [
     "reports.read",
@@ -203,11 +206,68 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  if (originalCreateObjectUrl) {
+    Object.defineProperty(URL, "createObjectURL", originalCreateObjectUrl);
+    originalCreateObjectUrl = undefined;
+  } else {
+    delete URL.createObjectURL;
+  }
+  if (originalRevokeObjectUrl) {
+    Object.defineProperty(URL, "revokeObjectURL", originalRevokeObjectUrl);
+    originalRevokeObjectUrl = undefined;
+  } else {
+    delete URL.revokeObjectURL;
+  }
   vi.useRealTimers();
   vi.clearAllMocks();
 });
 
 describe("Inventory report page", () => {
+  it("exports only the current authorized page to CSV", async () => {
+    originalCreateObjectUrl = Object.getOwnPropertyDescriptor(
+      URL,
+      "createObjectURL",
+    );
+    originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(
+      URL,
+      "revokeObjectURL",
+    );
+    const createObjectUrl = vi.fn(() => "blob:inventory-report");
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrl,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectUrl,
+    });
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+
+    renderPage();
+    await screen.findAllByText("9.007.199.254.740.993");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Exportar resultados (CSV)" }),
+    );
+
+    await waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(1));
+    const [blob] = createObjectUrl.mock.calls[0];
+    expect(blob.type).toBe("text/csv;charset=utf-8");
+    const csv = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(blob);
+    });
+    expect(csv).toContain("BOD-4 · Bodega Norte · Inactiva");
+    expect(csv).toContain("9007199254740993");
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:inventory-report");
+    anchorClick.mockRestore();
+  });
+
   it("shows only current authorized view, exact per-unit quantities and coverage without presenting excluded balances as zero", async () => {
     renderPage(["reports.read", "warehouses.read", "inventory.read"]);
     expect(
