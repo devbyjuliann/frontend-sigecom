@@ -5,12 +5,16 @@ import {
   BarChart,
   CartesianGrid,
   LabelList,
+  Line,
+  LineChart,
   XAxis,
   YAxis,
 } from "recharts";
 import { AddressBook } from "@phosphor-icons/react/AddressBook";
 import { Buildings } from "@phosphor-icons/react/Buildings";
 import { Package } from "@phosphor-icons/react/Package";
+import { Receipt } from "@phosphor-icons/react/Receipt";
+import { ShoppingCart } from "@phosphor-icons/react/ShoppingCart";
 import { Tag } from "@phosphor-icons/react/Tag";
 import { Truck } from "@phosphor-icons/react/Truck";
 import { Warehouse } from "@phosphor-icons/react/Warehouse";
@@ -18,6 +22,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth/auth-context.jsx";
 import { dashboardApi } from "../lib/auth-api.js";
 import { Button } from "../components/ui/button.jsx";
+import { formatBogotaDateTime, formatExactCop } from "../lib/sales-activity.js";
 import {
   ChartContainer,
   ChartTooltip,
@@ -63,6 +68,18 @@ const shortcuts = [
     icon: Truck,
   },
   {
+    label: "Ventas",
+    path: "/ventas",
+    permission: "sales.read",
+    icon: Receipt,
+  },
+  {
+    label: "Compras",
+    path: "/compras",
+    permission: "purchases.read",
+    icon: ShoppingCart,
+  },
+  {
     label: "Mi perfil",
     path: "/perfil",
     permission: "profile.read",
@@ -94,6 +111,42 @@ const metricDefinitions = [
     label: "Bodegas asignadas",
     permission: "warehouses.read",
     icon: Warehouse,
+  },
+];
+
+const commercialMetricDefinitions = [
+  {
+    key: "salesNet",
+    label: "Ventas netas del mes",
+    permission: "sales.read",
+    format: formatExactCop,
+    note: "Confirmaciones menos anulaciones y devoluciones equivalentes.",
+  },
+  {
+    key: "purchasesReceived",
+    label: "Compras recibidas del mes",
+    permission: "purchases.read",
+    format: formatExactCop,
+    note: "Costo documentado de las recepciones del período.",
+  },
+  {
+    key: "stockedProducts",
+    label: "Productos con existencias",
+    permission: "inventory.read",
+    format: formatCount,
+    note: "Productos distintos con saldo positivo en tus bodegas.",
+  },
+  {
+    key: "lowStockProducts",
+    label: "Productos con stock bajo",
+    permission: "inventory.read",
+    format: formatCount,
+  },
+  {
+    key: "pendingReceipts",
+    label: "Recepciones pendientes",
+    permission: "purchases.read",
+    format: formatCount,
   },
 ];
 
@@ -332,6 +385,298 @@ function CategoryChart({ items }) {
   );
 }
 
+function monthLabel(value) {
+  const [year, month] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("es-CO", {
+    month: "short",
+    timeZone: "America/Bogota",
+  }).format(new Date(Date.UTC(year, month - 1, 15)));
+}
+
+function SalesTrendPanel({ items }) {
+  const hasSales = items.some((item) => item.value !== "0.00");
+  return (
+    <section
+      className="dashboard-panel dashboard-commercial-panel"
+      aria-labelledby="sales-trend-title"
+    >
+      <div className="dashboard-panel-heading">
+        <div>
+          <h3 id="sales-trend-title">Tendencia de ventas</h3>
+          <p>Balance comercial de los últimos tres meses · COP</p>
+        </div>
+      </div>
+      {hasSales ? (
+        <figure
+          className="dashboard-commercial-chart"
+          aria-labelledby="sales-trend-title"
+        >
+          <ChartContainer
+            config={{
+              sales: { label: "Ventas netas", color: "var(--chart-1)" },
+            }}
+            className="aspect-auto"
+            style={{ height: 236 }}
+          >
+            <LineChart
+              data={items.map((item) => ({
+                ...item,
+                chartValue: Number(item.value),
+              }))}
+              margin={{ top: 14, right: 18, bottom: 4, left: 8 }}
+              accessibilityLayer
+            >
+              <CartesianGrid
+                vertical={false}
+                stroke="#e8edf4"
+                strokeDasharray="3 5"
+              />
+              <XAxis
+                dataKey="month"
+                tickFormatter={monthLabel}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis hide />
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    labelFormatter={(label) => monthLabel(label)}
+                    formatter={(_value, _name, payload) => (
+                      <span className="font-medium tabular-nums text-foreground">
+                        {formatExactCop(payload?.payload?.value)}
+                      </span>
+                    )}
+                    hideIndicator
+                  />
+                }
+              />
+              <Line
+                dataKey="chartValue"
+                name="Ventas netas"
+                stroke="var(--color-sales)"
+                strokeWidth={2.5}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ChartContainer>
+          <figcaption className="sr-only">
+            {items
+              .map(
+                (item) =>
+                  `${monthLabel(item.month)}: ${formatExactCop(item.value)}`,
+              )
+              .join(". ")}
+          </figcaption>
+          <ul className="sr-only" aria-label="Valores mensuales de ventas">
+            {items.map((item) => (
+              <li key={item.month}>
+                {item.month}: {formatExactCop(item.value)}
+              </li>
+            ))}
+          </ul>
+        </figure>
+      ) : (
+        <p className="dashboard-commercial-empty" role="status">
+          No hay ventas registradas en este período.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function TopProductsPanel({ items }) {
+  return (
+    <section
+      className="dashboard-panel dashboard-commercial-panel"
+      aria-labelledby="top-products-title"
+    >
+      <div className="dashboard-panel-heading">
+        <div>
+          <h3 id="top-products-title">Productos más vendidos</h3>
+          <p>Ordenados por valor comercial neto del mes · COP</p>
+        </div>
+      </div>
+      {items.length ? (
+        <ol className="dashboard-product-ranking">
+          {items.map((item) => (
+            <li key={item.productId}>
+              <span className="dashboard-product-ranking__name">
+                <strong>{item.name}</strong>
+                <small>{item.sku}</small>
+              </span>
+              <span className="dashboard-product-ranking__quantity">
+                {formatCount(BigInt(item.quantity))} {item.unit}
+              </span>
+              <strong className="dashboard-product-ranking__amount">
+                {formatExactCop(item.amount)}
+              </strong>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="dashboard-commercial-empty" role="status">
+          No hay ventas netas en el período.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function WarehouseStockPanel({ items }) {
+  const chartHeight = Math.max(items.length * 42 + 24, 150);
+  return (
+    <section
+      className="dashboard-panel dashboard-commercial-panel"
+      aria-labelledby="warehouse-stock-title"
+    >
+      <div className="dashboard-panel-heading">
+        <div>
+          <h3 id="warehouse-stock-title">Inventario por bodega</h3>
+          <p>Productos distintos con existencias positivas</p>
+        </div>
+      </div>
+      {items.length ? (
+        <figure
+          className="dashboard-commercial-chart"
+          aria-labelledby="warehouse-stock-title"
+        >
+          <ChartContainer
+            config={{
+              stockedProducts: {
+                label: "Productos con existencias",
+                color: "var(--chart-2)",
+              },
+            }}
+            className="aspect-auto"
+            style={{ height: chartHeight }}
+          >
+            <BarChart
+              data={items}
+              layout="vertical"
+              margin={{ top: 8, right: 30, bottom: 8, left: 4 }}
+              accessibilityLayer
+            >
+              <CartesianGrid
+                horizontal={false}
+                stroke="#e8edf4"
+                strokeDasharray="3 5"
+              />
+              <XAxis type="number" allowDecimals={false} hide />
+              <YAxis
+                type="category"
+                dataKey="warehouseCode"
+                width={58}
+                tickLine={false}
+                axisLine={false}
+              />
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => `${formatCount(value)} productos`}
+                    hideIndicator
+                  />
+                }
+              />
+              <Bar
+                dataKey="stockedProducts"
+                name="Productos con existencias"
+                fill="var(--color-stockedProducts)"
+                radius={[0, 6, 6, 0]}
+                maxBarSize={22}
+                isAnimationActive={false}
+              >
+                <LabelList
+                  dataKey="stockedProducts"
+                  position="right"
+                  formatter={formatCount}
+                  className="fill-foreground"
+                  fontSize={11}
+                />
+              </Bar>
+            </BarChart>
+          </ChartContainer>
+          <figcaption className="sr-only">
+            {items
+              .map(
+                (item) =>
+                  `${item.warehouseCode}, ${item.warehouseName}: ${formatCount(item.stockedProducts)} productos y ${formatCount(item.stockedPairs)} pares producto-bodega con existencias`,
+              )
+              .join(". ")}
+          </figcaption>
+          <ul
+            className="sr-only"
+            aria-label="Existencias autorizadas por bodega"
+          >
+            {items.map((item) => (
+              <li key={item.warehouseId}>
+                {item.warehouseCode} · {item.warehouseName}:{" "}
+                {formatCount(item.stockedProducts)} productos distintos.
+              </li>
+            ))}
+          </ul>
+        </figure>
+      ) : (
+        <p className="dashboard-commercial-empty" role="status">
+          No hay bodegas asignadas para consultar.
+        </p>
+      )}
+    </section>
+  );
+}
+
+const activityLabels = {
+  sale_confirmation: "Venta confirmada",
+  sale_cancellation: "Venta anulada",
+  customer_return: "Devolución de cliente",
+  purchase_receipt: "Recepción de compra",
+  supplier_return: "Devolución a proveedor",
+};
+
+function RecentActivityPanel({ items }) {
+  return (
+    <section
+      className="dashboard-panel dashboard-commercial-panel"
+      aria-labelledby="recent-activity-title"
+    >
+      <div className="dashboard-panel-heading">
+        <div>
+          <h3 id="recent-activity-title">Actividad comercial reciente</h3>
+          <p>Últimos movimientos visibles según tus permisos y bodegas</p>
+        </div>
+      </div>
+      {items.length ? (
+        <ol className="dashboard-recent-activity">
+          {items.map((item, index) => (
+            <li key={`${item.type}-${item.documentCode}-${index}`}>
+              <span>
+                <strong>
+                  {activityLabels[item.type] || "Actividad comercial"}
+                </strong>
+                <small>
+                  {item.documentCode} · {item.warehouseCode} ·{" "}
+                  {formatBogotaDateTime(item.occurredAt)}
+                </small>
+              </span>
+              {item.amount !== null ? (
+                <strong>{formatExactCop(item.amount)}</strong>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="dashboard-commercial-empty" role="status">
+          No hay actividad comercial registrada.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function DashboardPage() {
   const { session, reloadSession } = useAuth();
   const user = session.user;
@@ -410,6 +755,30 @@ export default function DashboardPage() {
     permissionSet.includes("products.read") &&
     permissionSet.includes("categories.read") &&
     dashboard.productsByCategory.available === true;
+  const commercialMetrics = commercialMetricDefinitions.filter(
+    (metric) =>
+      permissionSet.includes(metric.permission) &&
+      permissionSet.includes("warehouses.read") &&
+      dashboard.commercial?.[metric.key]?.available === true,
+  );
+  const commercial = dashboard.commercial;
+  const showSalesTrend =
+    permissionSet.includes("sales.read") &&
+    permissionSet.includes("warehouses.read") &&
+    commercial?.salesTrend?.available === true;
+  const showTopProducts =
+    permissionSet.includes("sales.read") &&
+    permissionSet.includes("warehouses.read") &&
+    commercial?.topProducts?.available === true;
+  const showWarehouseInventory =
+    permissionSet.includes("inventory.read") &&
+    permissionSet.includes("warehouses.read") &&
+    commercial?.inventoryByWarehouse?.available === true;
+  const showRecentActivity =
+    permissionSet.includes("warehouses.read") &&
+    (permissionSet.includes("sales.read") ||
+      permissionSet.includes("purchases.read")) &&
+    commercial?.recentActivity?.available === true;
 
   return (
     <section className="dashboard-page" aria-labelledby="dashboard-title">
@@ -457,32 +826,61 @@ export default function DashboardPage() {
         </section>
       ) : null}
 
-      <div className="dashboard-lower-grid">
-        {showCategoryChart ? (
-          <CategoryChart items={dashboard.productsByCategory.items} />
-        ) : null}
-        <aside
-          className="dashboard-panel dashboard-future-panel"
-          aria-labelledby="dashboard-future-title"
+      {commercialMetrics.length > 0 ? (
+        <section
+          className="dashboard-commercial-section"
+          aria-label="Indicadores comerciales autorizados"
         >
-          <div className="dashboard-panel-heading">
-            <div>
-              <h3 id="dashboard-future-title">Métricas aún no disponibles</h3>
-              <p>El resumen refleja únicamente operaciones implementadas.</p>
-            </div>
-            <span className="dashboard-panel-icon" aria-hidden="true">
-              <Buildings size={18} />
-            </span>
+          <div className="dashboard-commercial-heading">
+            <h3>Resumen comercial</h3>
+            <p>
+              {dashboard.commercial.period.dateFrom} –{" "}
+              {dashboard.commercial.period.dateTo} · America/Bogota
+            </p>
           </div>
-          <ul className="dashboard-future-list">
-            <li>Ventas y compras</li>
-            <li>Movimientos y valorización de inventario</li>
-          </ul>
-          <p className="dashboard-future-note">
-            No se muestran cifras hasta que esos módulos registren datos reales.
-          </p>
-        </aside>
-      </div>
+          <div className="dashboard-metric-grid dashboard-commercial-grid">
+            {commercialMetrics.map(({ key, label, format, note }) => (
+              <article className="dashboard-metric" key={key}>
+                <div className="dashboard-metric-copy">
+                  <span>{label}</span>
+                  <strong>{format(dashboard.commercial[key].value)}</strong>
+                  {note ? <small>{note}</small> : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {showCategoryChart ? (
+        <div className="dashboard-lower-grid dashboard-lower-grid--single">
+          <CategoryChart items={dashboard.productsByCategory.items} />
+        </div>
+      ) : null}
+
+      {showSalesTrend ||
+      showTopProducts ||
+      showWarehouseInventory ||
+      showRecentActivity ? (
+        <div className="dashboard-commercial-panels">
+          {showSalesTrend ? (
+            <SalesTrendPanel items={commercial.salesTrend.items || []} />
+          ) : null}
+          {showTopProducts ? (
+            <TopProductsPanel items={commercial.topProducts.items || []} />
+          ) : null}
+          {showWarehouseInventory ? (
+            <WarehouseStockPanel
+              items={commercial.inventoryByWarehouse.items || []}
+            />
+          ) : null}
+          {showRecentActivity ? (
+            <RecentActivityPanel
+              items={commercial.recentActivity.items || []}
+            />
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

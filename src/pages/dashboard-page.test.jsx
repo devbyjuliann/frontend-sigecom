@@ -33,6 +33,64 @@ const completeDashboard = {
       { categoryId: "2", categoryName: "Aseo", activeProducts: 7 },
     ],
   },
+  commercial: {
+    period: {
+      dateFrom: "2026-11-01",
+      dateTo: "2026-11-30",
+      timeZone: "America/Bogota",
+    },
+    salesNet: { available: true, value: "110.00" },
+    purchasesReceived: { available: true, value: "80.25" },
+    stockedProducts: { available: true, value: 6 },
+    lowStockProducts: { available: true, value: 2 },
+    pendingReceipts: { available: true, value: 3 },
+    salesTrend: {
+      available: true,
+      items: [
+        { month: "2026-09", value: "0.00" },
+        { month: "2026-10", value: "35.50" },
+        { month: "2026-11", value: "110.00" },
+      ],
+    },
+    topProducts: {
+      available: true,
+      items: [
+        {
+          productId: "2",
+          sku: "SKU-2",
+          name: "Martillo",
+          unit: "unidad",
+          quantity: "3",
+          amount: "110.00",
+        },
+      ],
+    },
+    inventoryByWarehouse: {
+      available: true,
+      items: [
+        {
+          warehouseId: "1",
+          warehouseCode: "B01",
+          warehouseName: "Principal",
+          stockedProducts: 6,
+          stockedPairs: 8,
+        },
+      ],
+    },
+    recentActivity: {
+      available: true,
+      items: [
+        {
+          type: "sale_confirmation",
+          occurredAt: "2026-11-14T15:00:00.000Z",
+          documentCode: "VE-2026-1",
+          warehouseCode: "B01",
+          warehouseName: "Principal",
+          amount: "110.00",
+        },
+      ],
+    },
+  },
 };
 
 function renderDashboard({
@@ -44,6 +102,9 @@ function renderDashboard({
     "suppliers.read",
     "warehouses.read",
     "profile.read",
+    "sales.read",
+    "purchases.read",
+    "inventory.read",
   ],
   userId = "user-1",
   dashboard = completeDashboard,
@@ -113,7 +174,38 @@ describe("DashboardPage", () => {
       "href",
       "/clientes",
     );
-    expect(screen.queryByText(/ventas netas|utilidad/i)).toBeNull();
+    expect(screen.getByRole("link", { name: "Ventas" })).toHaveAttribute(
+      "href",
+      "/ventas",
+    );
+    expect(screen.getByRole("link", { name: "Compras" })).toHaveAttribute(
+      "href",
+      "/compras",
+    );
+    expect(screen.getByText("Ventas netas del mes")).toBeInTheDocument();
+    expect(screen.getByText("Compras recibidas del mes")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ventas netas del mes").closest("article"),
+    ).toHaveTextContent(/110,00/);
+    expect(screen.getByText("Productos con stock bajo")).toBeInTheDocument();
+    expect(screen.getByText("Productos con existencias")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Tendencia de ventas" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Productos más vendidos" }),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("list", {
+          name: "Existencias autorizadas por bodega",
+        }),
+      ).getByRole("listitem"),
+    ).toHaveTextContent("B01 · Principal: 6 productos distintos.");
+    expect(
+      screen.getByText("Actividad comercial reciente"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/VE-2026-1/)).toBeInTheDocument();
   });
 
   it("hides module indicators and shortcuts the current user cannot read", async () => {
@@ -128,14 +220,38 @@ describe("DashboardPage", () => {
           accessibleWarehouses: { available: false, value: null },
         },
         productsByCategory: { available: false, items: null },
+        commercial: {
+          period: completeDashboard.commercial.period,
+          salesNet: { available: false, value: null },
+          purchasesReceived: { available: false, value: null },
+          stockedProducts: { available: false, value: null },
+          lowStockProducts: { available: false, value: null },
+          pendingReceipts: { available: false, value: null },
+        },
       },
     });
     expect(await screen.findByText("12")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Clientes" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Proveedores" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Bodegas" })).toBeNull();
+    expect(screen.queryByText("Ventas netas del mes")).toBeNull();
     expect(
       screen.queryByText("Distribución de productos por categoría"),
+    ).toBeNull();
+  });
+
+  it("does not render cached commercial charts without the corresponding module and warehouse permissions", async () => {
+    renderDashboard({ permissions: ["dashboard.read", "warehouses.read"] });
+    await screen.findByRole("heading", { level: 2 });
+    expect(
+      screen.queryByRole("heading", { name: "Tendencia de ventas" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Productos más vendidos" }),
+    ).toBeNull();
+    expect(screen.queryByText("Actividad comercial reciente")).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Inventario por bodega" }),
     ).toBeNull();
   });
 
