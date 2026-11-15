@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import PurchaseOrdersPage from "./purchase-orders-page.jsx";
 import { useAuth } from "../auth/auth-context.jsx";
 import { reportApi } from "../lib/auth-api.js";
+import { createCsv, downloadCsv } from "../lib/csv.js";
 
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
 vi.mock("../lib/auth-api.js", async (importOriginal) => {
@@ -15,6 +16,10 @@ vi.mock("../lib/auth-api.js", async (importOriginal) => {
     reportApi: { purchaseOrders: vi.fn(), purchaseReceiptWarehouses: vi.fn() },
   };
 });
+vi.mock("../lib/csv.js", () => ({
+  createCsv: vi.fn(() => "purchase-orders-csv"),
+  downloadCsv: vi.fn(),
+}));
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -151,4 +156,67 @@ it("renders actual pending, received and closed quantities without conflating re
   expect(screen.getByText("Remanente cerrado")).toBeInTheDocument();
   expect(screen.getAllByText("0").length).toBeGreaterThan(0);
   expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+});
+
+it("exports only the currently filtered purchase-order page to CSV", async () => {
+  const filteredResult = {
+    ...emptyResult,
+    orders: [
+      {
+        id: "42",
+        commercialCode: "OC-42",
+        orderDate: "2026-01-12",
+        warehouse: { code: "B01", name: "Principal" },
+        status: "confirmed",
+        situation: "closed_with_remnant",
+        orderedValue: "50.00",
+        lines: [],
+      },
+    ],
+    pagination: { page: 1, pageSize: 20, total: "1", totalPages: "1" },
+  };
+  const user = userEvent.setup();
+  renderPage();
+  await screen.findByText("Órdenes verificables");
+  reportApi.purchaseOrders.mockResolvedValue(filteredResult);
+  await user.type(
+    screen.getByLabelText("Referencia comercial actual"),
+    "OC-42",
+  );
+  await user.click(screen.getByRole("button", { name: "Consultar" }));
+  expect(await screen.findByText("OC-42")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(reportApi.purchaseOrders).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: "OC-42", page: 1 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    ),
+  );
+
+  await user.click(
+    screen.getByRole("button", { name: "Exportar resultados (CSV)" }),
+  );
+
+  await waitFor(() =>
+    expect(createCsv).toHaveBeenCalledWith(
+      [
+        {
+          code: "OC-42",
+          orderDate: "2026-01-12",
+          warehouse: "B01 · Principal",
+          status: "Confirmada",
+          situation: "Cerrada con remanente",
+          orderedValue: "50.00",
+        },
+      ],
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Código de orden" }),
+        expect.objectContaining({ label: "Bodega" }),
+        expect.objectContaining({ label: "Valor original COP" }),
+      ]),
+    ),
+  );
+  expect(downloadCsv).toHaveBeenCalledWith(
+    expect.stringMatching(/^ordenes-compra-completas-\d{4}-\d{2}-\d{2}\.csv$/),
+    "purchase-orders-csv",
+  );
 });

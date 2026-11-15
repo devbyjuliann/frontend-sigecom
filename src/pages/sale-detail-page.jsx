@@ -121,10 +121,14 @@ export default function SaleDetailPage() {
   });
   const canEdit =
     sale.data?.status === "draft" &&
+    sale.data.warehouseIsActive === true &&
+    session.warehouseIds?.includes(String(sale.data.warehouseId)) &&
     session.permissions.includes("sales.create") &&
     (session.user.role !== "seller" || sale.data.createdBy === session.user.id);
   const canCancel =
     sale.data?.status === "draft" &&
+    sale.data.warehouseIsActive === true &&
+    session.warehouseIds?.includes(String(sale.data.warehouseId)) &&
     session.permissions.includes("sales.cancel");
   const canReverse =
     sale.data?.status === "confirmed" &&
@@ -140,6 +144,8 @@ export default function SaleDetailPage() {
     session.permissions.includes("sales.return");
   const canConfirm =
     sale.data?.status === "draft" &&
+    sale.data.warehouseIsActive === true &&
+    session.warehouseIds?.includes(String(sale.data.warehouseId)) &&
     session.permissions.includes("sales.confirm") &&
     (session.user.role !== "seller" || sale.data.createdBy === session.user.id);
   const cancel = useMutation({
@@ -1477,6 +1483,7 @@ export default function SaleDetailPage() {
               <dt>Bodega</dt>
               <dd>
                 {document.warehouseName}
+                {!document.warehouseIsActive ? " (inactiva)" : ""}
                 <small>
                   {document.warehouseCode}
                   {document.warehouseLocation

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowClockwise } from "@phosphor-icons/react/ArrowClockwise";
 import { Receipt } from "@phosphor-icons/react/Receipt";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
+import { createCsv, downloadCsv } from "../lib/csv.js";
+import { fetchAllReportRows } from "../lib/csv-export.js";
 import DataTable from "../components/data-table.jsx";
 import { useAuth } from "../auth/auth-context.jsx";
 import { ApiError, reportApi } from "../lib/auth-api.js";
@@ -48,6 +50,13 @@ export default function PurchaseReceiptsPage() {
   const queryClient = useQueryClient();
   const identity = identityScope(session);
   const previousIdentity = useRef(identity);
+  const identityRef = useRef(identity);
+  useLayoutEffect(() => {
+    identityRef.current = identity;
+  }, [identity]);
+  const exportController = useRef(null);
+  const [exportError, setExportError] = useState("");
+  const [exporting, setExporting] = useState(false);
   const initialPeriod = useMemo(() => defaultPurchaseReceiptsPeriod(), []);
   const [draft, setDraft] = useState(() => ({
     ...initialPeriod,
@@ -68,6 +77,7 @@ export default function PurchaseReceiptsPage() {
   useEffect(() => {
     if (previousIdentity.current === identity) return;
     previousIdentity.current = identity;
+    exportController.current?.abort();
     queryClient.removeQueries({ queryKey: ["purchase-receipts"] });
     setAccessIssue("");
     setSelectedWarehouse(null);
@@ -256,6 +266,72 @@ export default function PurchaseReceiptsPage() {
     event.preventDefault();
     setWarehouseSearch(warehouseSearchDraft.trim());
     setWarehousePage(1);
+  }
+
+  async function exportCurrentPage() {
+    exportController.current?.abort();
+    const controller = new AbortController();
+    exportController.current = controller;
+    setExporting(true);
+    setExportError("");
+    try {
+      const activities = await fetchAllReportRows({
+        fetchPage: reportApi.purchaseReceipts,
+        filters: {
+          dateFrom: applied.dateFrom,
+          dateTo: applied.dateTo,
+          ...(applied.warehouseId ? { warehouseId: applied.warehouseId } : {}),
+        },
+        pageSize: 100,
+        identity,
+        getCurrentIdentity: () => identityRef.current,
+        signal: controller.signal,
+        rowsKey: "activities",
+      });
+      const columns = [
+        { key: "occurredAt", label: "Fecha" },
+        { key: "activity", label: "Tipo de actividad" },
+        { key: "order", label: "Orden relacionada", type: "number" },
+        { key: "document", label: "Recepción o devolución" },
+        { key: "warehouse", label: "Bodega" },
+        { key: "amount", label: "Importe COP", type: "number" },
+        { key: "quantities", label: "Cantidades" },
+      ];
+      const rows = activities.map((activity) => ({
+        occurredAt: formatBogotaDateTime(activity.occurredAt),
+        activity: labels[activity.type] || "Actividad de compras",
+        order: activity.purchaseOrderId,
+        document:
+          activity.type === "supplier_return"
+            ? `Devolución #${activity.supplierReturnId}`
+            : `Recepción #${activity.purchaseReceiptId}`,
+        warehouse: `${activity.warehouse.code} · ${activity.warehouse.name}`,
+        amount: activity.amount,
+        quantities: (activity.quantitiesByUnit || [])
+          .map((item) => {
+            const value = item.quantityReturned ?? item.quantityReceived;
+            return `${item.unit}: ${activity.type === "supplier_return" ? "devueltas" : "recibidas"} ${value}`;
+          })
+          .join("; "),
+      }));
+      const date = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Bogota",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      downloadCsv(
+        `actividad-compras-completa-${date}.csv`,
+        createCsv(rows, columns),
+      );
+    } catch (error) {
+      if (error.name !== "AbortError")
+        setExportError(error.message || "No fue posible exportar el reporte.");
+    } finally {
+      if (exportController.current === controller)
+        exportController.current = null;
+      setExporting(false);
+    }
   }
 
   const accessError = activityQuery.error || warehouseQuery.error;
@@ -585,8 +661,26 @@ export default function PurchaseReceiptsPage() {
                   autorizadas.
                 </p>
               </div>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={exportCurrentPage}
+                disabled={
+                  result.activities.length === 0 ||
+                  activityQuery.isFetching ||
+                  exporting ||
+                  Boolean(accessIssue)
+                }
+              >
+                {exporting ? "Preparando CSV…" : "Exportar resultados (CSV)"}
+              </Button>
               <span className="activity-timezone">Fechas: America/Bogota</span>
             </div>
+            {exportError ? (
+              <p className="form-error" role="alert">
+                {exportError}
+              </p>
+            ) : null}
             <DataTable
               columns={columns}
               data={result.activities}

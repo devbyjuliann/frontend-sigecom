@@ -12,6 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import PurchaseReceiptsPage from "./purchase-receipts-page.jsx";
 import { useAuth } from "../auth/auth-context.jsx";
 import { ApiError, reportApi } from "../lib/auth-api.js";
+import { createCsv, downloadCsv } from "../lib/csv.js";
 
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
 vi.mock("../lib/auth-api.js", async (importOriginal) => {
@@ -24,6 +25,10 @@ vi.mock("../lib/auth-api.js", async (importOriginal) => {
     },
   };
 });
+vi.mock("../lib/csv.js", () => ({
+  createCsv: vi.fn(() => "purchase-csv"),
+  downloadCsv: vi.fn(),
+}));
 
 const result = (page = 1) => ({
   period: {
@@ -152,6 +157,44 @@ it("renders exact API indicators, policy clarifications, unit-separated signed d
   expect(within(table).getAllByText("Orden #80")).toHaveLength(2);
   expect(within(table).getByText("Devolución #91")).toBeInTheDocument();
   expect(within(table).getByText("Recepción #86")).toBeInTheDocument();
+});
+
+it("exports all filtered purchase activity within the explicit cap", async () => {
+  renderPage();
+  await screen.findByRole("region", {
+    name: "Tabla de Recepciones y Devoluciones de Compras",
+  });
+
+  reportApi.purchaseReceipts.mockResolvedValueOnce({
+    ...result(1),
+    pagination: { page: 1, pageSize: 100, total: 2, totalPages: 1 },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Exportar resultados (CSV)" }),
+  );
+
+  await waitFor(() =>
+    expect(createCsv).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          document: "Devolución #91",
+          order: "80",
+          warehouse: "B-1 · Bodega Norte",
+          amount: "49.61",
+        }),
+      ]),
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Fecha" }),
+        expect.objectContaining({ label: "Tipo de actividad" }),
+      ]),
+    ),
+  );
+  expect(downloadCsv).toHaveBeenCalledWith(
+    expect.stringMatching(
+      /^actividad-compras-completa-\d{4}-\d{2}-\d{2}\.csv$/,
+    ),
+    "purchase-csv",
+  );
 });
 
 it("uses Bogotá defaults, the purchase-only warehouse endpoint, and paginates on the server", async () => {

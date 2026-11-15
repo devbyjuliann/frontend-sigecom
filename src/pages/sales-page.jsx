@@ -47,6 +47,7 @@ export default function SalesPage() {
       page,
       pageSize,
       q: params.get("q") || "",
+      customerId: params.get("customerId") || "",
       status: params.get("status") || "all",
       warehouseId: params.get("warehouseId") || "",
       dateFrom: params.get("dateFrom") || "",
@@ -67,7 +68,7 @@ export default function SalesPage() {
       warehousesApi.list({
         page: 1,
         pageSize: 100,
-        status: "active",
+        status: "all",
         sortBy: "name",
         sortOrder: "asc",
       }),
@@ -113,6 +114,18 @@ export default function SalesPage() {
       </header>
 
       <section className="purchase-list-panel" aria-label="Listado de ventas">
+        {filters.customerId ? (
+          <p className="purchase-context-filter" role="status">
+            Filtrando por cliente #{filters.customerId}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => updateFilters({ customerId: "" })}
+            >
+              Quitar filtro de cliente
+            </Button>
+          </p>
+        ) : null}
         <div className="purchase-toolbar">
           <form
             className="purchase-search"
@@ -264,7 +277,12 @@ export default function SalesPage() {
                       {date.format(new Date(`${sale.saleDate}T12:00:00-05:00`))}
                     </td>
                     <td data-label="Cliente">{sale.customerName}</td>
-                    <td data-label="Bodega">{sale.warehouseName}</td>
+                    <td data-label="Bodega">
+                      {sale.warehouseName}
+                      {!sale.warehouseIsActive ? (
+                        <small className="block text-muted">(inactiva)</small>
+                      ) : null}
+                    </td>
                     <td data-label="Estado">
                       <span
                         className={`purchase-status purchase-status--${sale.status}`}

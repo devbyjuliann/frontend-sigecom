@@ -100,6 +100,26 @@ describe("PurchasesPage", () => {
     );
   });
 
+  it("marks orders assigned to inactive warehouses as historical", async () => {
+    renderPage("/compras", [
+      {
+        id: "18",
+        number: "OC-000018",
+        orderDate: "2026-10-27",
+        supplierName: "Proveedor Histórico",
+        warehouseName: "Bodega Cerrada",
+        warehouseIsActive: false,
+        status: "confirmed",
+        total: "900.00",
+        version: 1,
+        lines: [],
+      },
+    ]);
+
+    expect(await screen.findByText("OC-000018")).toBeInTheDocument();
+    expect(screen.getByText("(inactiva)")).toBeInTheDocument();
+  });
+
   it("expands each order accessibly to show its own ordered, received, and pending quantities", async () => {
     const user = userEvent.setup();
     renderPage("/compras", [
@@ -234,5 +254,17 @@ describe("PurchasesPage", () => {
       }),
     ).toBeInTheDocument();
     expect(purchasesApi.list).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a supplier context filter in the purchase API request", async () => {
+    renderPage("/compras?supplierId=42", []);
+
+    expect(
+      await screen.findByText("Aún no hay órdenes de compra"),
+    ).toBeInTheDocument();
+    expect(purchasesApi.list).toHaveBeenCalledWith(
+      expect.objectContaining({ supplierId: "42" }),
+    );
+    expect(screen.getByText("Filtrando por proveedor #42")).toBeInTheDocument();
   });
 });

@@ -129,6 +129,7 @@ export default function PurchasesPage() {
   const warehouseId = params.get("warehouseId") || "";
   const dateFrom = params.get("dateFrom") || "";
   const dateTo = params.get("dateTo") || "";
+  const supplierId = params.get("supplierId") || "";
   const sortBy = params.get("sortBy") || "date";
   const sortOrder = params.get("sortOrder") || "desc";
   const filters = useMemo(
@@ -136,6 +137,7 @@ export default function PurchasesPage() {
       page,
       pageSize,
       q: params.get("q") || "",
+      supplierId,
       status,
       warehouseId,
       dateFrom,
@@ -153,6 +155,7 @@ export default function PurchasesPage() {
       dateTo,
       sortBy,
       sortOrder,
+      supplierId,
     ],
   );
   const warehouses = useQuery({
@@ -246,6 +249,14 @@ export default function PurchasesPage() {
       }),
       column.accessor("warehouseName", {
         header: "Bodega destino",
+        cell: ({ getValue, row }) => (
+          <>
+            {getValue()}
+            {!row.original.warehouseIsActive ? (
+              <small className="block text-muted">(inactiva)</small>
+            ) : null}
+          </>
+        ),
       }),
       column.accessor("status", {
         header: ({ column: current }) => (
@@ -287,6 +298,18 @@ export default function PurchasesPage() {
       </header>
 
       <section className="purchase-list-panel" aria-label="Órdenes registradas">
+        {supplierId ? (
+          <p className="purchase-context-filter" role="status">
+            Filtrando por proveedor #{supplierId}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => change("supplierId", "")}
+            >
+              Quitar filtro de proveedor
+            </Button>
+          </p>
+        ) : null}
         <div className="purchase-toolbar">
           <form
             className="purchase-search"

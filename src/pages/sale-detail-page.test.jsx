@@ -43,6 +43,7 @@ const draft = {
   warehouseName: "Bodega Norte",
   warehouseCode: "BN-1",
   warehouseId: "1",
+  warehouseIsActive: true,
   saleDate: "2026-10-30",
   status: "draft",
   version: 2,
@@ -131,6 +132,24 @@ describe("SaleDetailPage", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /cancelar borrador/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps an inactive-warehouse draft readable but hides operational actions", async () => {
+    renderDetail(
+      ["sales.read", "sales.create", "sales.confirm", "sales.cancel"],
+      {
+        ...draft,
+        warehouseIsActive: false,
+      },
+    );
+
+    expect(await screen.findByText("VE-000012")).toBeInTheDocument();
+    expect(screen.getByText(/Bodega Norte\s+\(inactiva\)/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /confirmar venta|cancelar borrador/i,
+      }),
     ).not.toBeInTheDocument();
   });
 

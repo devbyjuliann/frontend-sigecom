@@ -25,6 +25,7 @@ function renderSales(
     },
   ],
   permissions = ["sales.read", "sales.create"],
+  path = "/ventas",
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -37,7 +38,7 @@ function renderSales(
   warehousesApi.list.mockResolvedValue({ items: [] });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/ventas"]}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/ventas" element={<SalesPage />} />
         </Routes>
@@ -72,5 +73,37 @@ describe("SalesPage", () => {
     expect(
       screen.queryByRole("link", { name: /nueva venta/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows historical sales from inactive warehouses and marks them", async () => {
+    renderSales([
+      {
+        id: "13",
+        number: "VE-000013",
+        saleDate: "2026-10-29",
+        customerName: "Cliente Histórico",
+        warehouseName: "Bodega Cerrada",
+        warehouseIsActive: false,
+        status: "confirmed",
+        total: "100.00",
+      },
+    ]);
+
+    expect(await screen.findByText("VE-000013")).toBeInTheDocument();
+    expect(screen.getByText("Bodega Cerrada")).toBeInTheDocument();
+    expect(screen.getByText("(inactiva)")).toBeInTheDocument();
+    expect(warehousesApi.list).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "all" }),
+    );
+  });
+
+  it("keeps a customer context filter in the sales API request", async () => {
+    renderSales(undefined, ["sales.read"], "/ventas?customerId=44");
+
+    await screen.findByText("VE-000012");
+    expect(salesApi.list).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: "44" }),
+    );
+    expect(screen.getByText("Filtrando por cliente #44")).toBeInTheDocument();
   });
 });

@@ -52,6 +52,7 @@ function renderPage(
       "purchases.close",
       ...(sessionOverrides.returnPermission ? ["purchases.return"] : []),
     ],
+    warehouseIds: ["1"],
     ...sessionOverrides,
   };
   useAuth.mockReturnValue({
@@ -67,6 +68,8 @@ function renderPage(
     supplierName: "Proveedor Norte",
     supplierIdentification: "900123456",
     warehouseName: "Bodega Central",
+    warehouseId: "1",
+    warehouseIsActive: true,
     lines: [
       {
         id: "31",
@@ -103,6 +106,19 @@ describe("PurchaseDetailPage receipts", () => {
     clearPendingOperationStorage();
     sessionStorage.clear();
     vi.clearAllMocks();
+  });
+
+  it("keeps an inactive-warehouse order readable but hides receipt actions", async () => {
+    renderPage({ warehouseIsActive: false }, undefined, [], {
+      permissions: ["purchases.read", "purchases.receive"],
+      warehouseIds: ["1"],
+    });
+
+    expect(await screen.findByText("OC-000012")).toBeInTheDocument();
+    expect(screen.getByText(/Bodega Central \(inactiva\)/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /registrar recepción/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not restore another account's legacy receipt request on a shared order", async () => {

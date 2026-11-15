@@ -86,13 +86,26 @@ export default function PurchaseDetailPage() {
     (line) => Number(line.unitCost) === 0,
   );
   const canManage = session.user.role === "administrator";
-  const canEdit = canManage && session.permissions.includes("purchases.create");
+  const canOperateWarehouse = Boolean(
+    order.data?.warehouseIsActive &&
+    session.warehouseIds?.includes(String(order.data.warehouseId)),
+  );
+  const canEdit =
+    canOperateWarehouse &&
+    canManage &&
+    session.permissions.includes("purchases.create");
   const canConfirm =
-    canManage && session.permissions.includes("purchases.confirm");
+    canOperateWarehouse &&
+    canManage &&
+    session.permissions.includes("purchases.confirm");
   const canCancel =
-    canManage && session.permissions.includes("purchases.cancel");
+    canOperateWarehouse &&
+    canManage &&
+    session.permissions.includes("purchases.cancel");
   const canReceive =
-    canManage && session.permissions.includes("purchases.receive");
+    canOperateWarehouse &&
+    canManage &&
+    session.permissions.includes("purchases.receive");
   const receipts = useQuery({
     queryKey: ["purchase-receipts", id],
     queryFn: () => purchasesApi.receipts(id),
@@ -106,7 +119,9 @@ export default function PurchaseDetailPage() {
     retry: false,
   });
   const canReturn =
-    canManage && session.permissions.includes("purchases.return");
+    canOperateWarehouse &&
+    canManage &&
+    session.permissions.includes("purchases.return");
   const createReturn = useMutation({
     mutationFn: () => {
       const saved =
@@ -397,6 +412,7 @@ export default function PurchaseDetailPage() {
   const item = order.data;
   const hasPending = item.lines.some((line) => line.pendingQuantity > 0);
   const canClose =
+    canOperateWarehouse &&
     canManage &&
     session.permissions.includes("purchases.close") &&
     item.status === "confirmed" &&
@@ -558,7 +574,10 @@ export default function PurchaseDetailPage() {
             </div>
             <div>
               <dt>Bodega destino</dt>
-              <dd>{item.warehouseName}</dd>
+              <dd>
+                {item.warehouseName}
+                {!item.warehouseIsActive ? " (inactiva)" : ""}
+              </dd>
             </div>
             {item.reference ? (
               <div>

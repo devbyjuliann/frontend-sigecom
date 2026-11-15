@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowClockwise } from "@phosphor-icons/react/ArrowClockwise";
@@ -6,6 +6,8 @@ import { CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CaretUp } from "@phosphor-icons/react/CaretUp";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
+import { createCsv, downloadCsv } from "../lib/csv.js";
+import { fetchAllReportRows } from "../lib/csv-export.js";
 import DataTable from "../components/data-table.jsx";
 import { useAuth } from "../auth/auth-context.jsx";
 import { ApiError, reportApi } from "../lib/auth-api.js";
@@ -118,6 +120,13 @@ export default function PurchaseOrdersPage() {
   const identity = identityScope(session);
   const permissions = [...(session?.permissions || [])].sort().join(",");
   const previousIdentity = useRef(identity);
+  const identityRef = useRef(identity);
+  useLayoutEffect(() => {
+    identityRef.current = identity;
+  }, [identity]);
+  const exportController = useRef(null);
+  const [exportError, setExportError] = useState("");
+  const [exporting, setExporting] = useState(false);
   const initialPeriod = useMemo(() => defaultPurchaseReceiptsPeriod(), []);
   const [mode, setMode] = useState("pending");
   const [draft, setDraft] = useState({
@@ -143,6 +152,7 @@ export default function PurchaseOrdersPage() {
   useEffect(() => {
     if (previousIdentity.current === identity) return;
     previousIdentity.current = identity;
+    exportController.current?.abort();
     queryClient.removeQueries({ queryKey: [queryRoot] });
     setAccessIssue("");
     setExpanded(new Set());
@@ -270,6 +280,66 @@ export default function PurchaseOrdersPage() {
     ],
     [expanded],
   );
+
+  async function exportCurrentPage() {
+    exportController.current?.abort();
+    const controller = new AbortController();
+    exportController.current = controller;
+    setExporting(true);
+    setExportError("");
+    try {
+      const allOrders = await fetchAllReportRows({
+        fetchPage: reportApi.purchaseOrders,
+        filters: {
+          mode: applied.mode,
+          ...(applied.mode === "period"
+            ? { dateFrom: applied.dateFrom, dateTo: applied.dateTo }
+            : {}),
+          ...(applied.warehouseId ? { warehouseId: applied.warehouseId } : {}),
+          ...(applied.q ? { q: applied.q } : {}),
+          ...(applied.situation ? { situation: applied.situation } : {}),
+        },
+        pageSize: 50,
+        identity,
+        getCurrentIdentity: () => identityRef.current,
+        signal: controller.signal,
+        rowsKey: "orders",
+      });
+      const csvColumns = [
+        { key: "code", label: "Código de orden" },
+        { key: "orderDate", label: "Fecha documental" },
+        { key: "warehouse", label: "Bodega" },
+        { key: "status", label: "Estado documental" },
+        { key: "situation", label: "Situación actual" },
+        { key: "orderedValue", label: "Valor original COP", type: "number" },
+      ];
+      const rows = allOrders.map((order) => ({
+        code: order.commercialCode,
+        orderDate: order.orderDate,
+        warehouse: `${order.warehouse.code} · ${order.warehouse.name}`,
+        status: statusLabels[order.status] || order.status,
+        situation: situationLabels[order.situation] || order.situation,
+        orderedValue: order.orderedValue,
+      }));
+      const date = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Bogota",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      downloadCsv(
+        `ordenes-compra-completas-${date}.csv`,
+        createCsv(rows, csvColumns),
+      );
+    } catch (error) {
+      if (error.name !== "AbortError")
+        setExportError(error.message || "No fue posible exportar el reporte.");
+    } finally {
+      if (exportController.current === controller)
+        exportController.current = null;
+      setExporting(false);
+    }
+  }
 
   function submit(event) {
     event.preventDefault();
@@ -656,7 +726,25 @@ export default function PurchaseOrdersPage() {
                 <h3>Órdenes consultadas</h3>
                 <p>Generado: {formatBogotaDateTime(result.generatedAt)}</p>
               </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={exportCurrentPage}
+                disabled={
+                  orders.length === 0 ||
+                  reportQuery.isFetching ||
+                  exporting ||
+                  Boolean(accessIssue)
+                }
+              >
+                {exporting ? "Preparando CSV…" : "Exportar resultados (CSV)"}
+              </Button>
             </div>
+            {exportError ? (
+              <p className="form-error" role="alert">
+                {exportError}
+              </p>
+            ) : null}
             <DataTable
               columns={columns}
               data={orders}
