@@ -1,3 +1,5 @@
+import { apiUrl } from "./api-url.js";
+
 export class ApiError extends Error {
   constructor({ code, message, status }) {
     super(message);
@@ -34,7 +36,7 @@ async function readResponse(response) {
 async function getCsrfToken() {
   let response;
   try {
-    response = await fetch("/api/v1/auth/csrf", {
+    response = await fetch(apiUrl("/api/v1/auth/csrf"), {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -57,7 +59,7 @@ async function post(path, body, { idempotencyKey } = {}) {
   let response;
 
   try {
-    response = await fetch(path, {
+    response = await fetch(apiUrl(path), {
       method: "POST",
       credentials: "include",
       headers: {
@@ -83,7 +85,7 @@ async function post(path, body, { idempotencyKey } = {}) {
 async function get(path, { signal } = {}) {
   let response;
   try {
-    response = await fetch(path, {
+    response = await fetch(apiUrl(path), {
       method: "GET",
       credentials: "include",
       signal,
@@ -105,7 +107,7 @@ async function patch(path, body, { idempotencyKey } = {}) {
   const token = csrfToken || (await getCsrfToken());
   let response;
   try {
-    response = await fetch(path, {
+    response = await fetch(apiUrl(path), {
       method: "PATCH",
       credentials: "include",
       headers: {
