@@ -141,4 +141,63 @@ describe("business partner pages", () => {
       );
     });
   });
+
+  it("links a customer detail to sales history only when sales are readable", async () => {
+    customersApi.list.mockResolvedValue({
+      items: [
+        {
+          id: "44",
+          identificationNumber: "90044",
+          name: "Cliente de historial",
+          isActive: true,
+        },
+      ],
+      pagination: { page: 1, pageSize: 10, total: 1, pageCount: 1 },
+    });
+    customersApi.get.mockResolvedValue({
+      id: "44",
+      identificationNumber: "90044",
+      name: "Cliente de historial",
+      isActive: true,
+    });
+
+    renderPage(CustomersPage, ["customers.read", "sales.read"]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Ver cliente 90044" }),
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "Ver historial de ventas" }),
+    ).toHaveAttribute("href", "/ventas?customerId=44");
+  });
+
+  it("does not offer customer sales history without sales permission", async () => {
+    customersApi.list.mockResolvedValue({
+      items: [
+        {
+          id: "44",
+          identificationNumber: "90044",
+          name: "Cliente de historial",
+          isActive: true,
+        },
+      ],
+      pagination: { page: 1, pageSize: 10, total: 1, pageCount: 1 },
+    });
+    customersApi.get.mockResolvedValue({
+      id: "44",
+      identificationNumber: "90044",
+      name: "Cliente de historial",
+      isActive: true,
+    });
+
+    renderPage(CustomersPage, ["customers.read"]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Ver cliente 90044" }),
+    );
+
+    expect(await screen.findByText("Cliente de historial")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Ver historial de ventas" }),
+    ).not.toBeInTheDocument();
+  });
 });

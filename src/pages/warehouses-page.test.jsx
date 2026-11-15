@@ -96,6 +96,24 @@ describe("WarehousesPage", () => {
     expect(warehousesApi.get).toHaveBeenCalledWith("42");
   });
 
+  it("offers only authorized warehouse-related links", async () => {
+    renderPage({
+      permissions: ["warehouses.read", "inventory.read", "sales.read"],
+    });
+    await screen.findByRole("row", { name: /BOD-42 Bodega central/ });
+    fireEvent.click(screen.getByRole("button", { name: "Ver bodega BOD-42" }));
+
+    expect(
+      await screen.findByRole("link", { name: "Consultar inventario" }),
+    ).toHaveAttribute("href", "/inventario?warehouseId=42");
+    expect(
+      screen.getByRole("link", { name: "Consultar ventas" }),
+    ).toHaveAttribute("href", "/ventas?warehouseId=42");
+    expect(
+      screen.queryByRole("link", { name: "Consultar compras" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("validates creation and saves a warehouse with an optional responsible", async () => {
     warehousesApi.create.mockResolvedValueOnce(warehouse);
     renderPage();

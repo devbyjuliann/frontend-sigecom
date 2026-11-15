@@ -11,7 +11,7 @@ import { Plus } from "@phosphor-icons/react/Plus";
 import { Power } from "@phosphor-icons/react/Power";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 import DataTable, { SortableHeading } from "../components/data-table.jsx";
@@ -934,6 +934,32 @@ export function BusinessPartnersPage({ resource }) {
               </>
             ) : null}
             <div className="module-dialog__actions">
+              {detail &&
+              resource === "customers" &&
+              session.permissions.includes("sales.read") ? (
+                <Dialog.Close asChild>
+                  <Button asChild type="button" variant="secondary">
+                    <Link
+                      to={`/ventas?customerId=${encodeURIComponent(detail.id)}`}
+                    >
+                      Ver historial de ventas
+                    </Link>
+                  </Button>
+                </Dialog.Close>
+              ) : null}
+              {detail &&
+              resource === "suppliers" &&
+              session.permissions.includes("purchases.read") ? (
+                <Dialog.Close asChild>
+                  <Button asChild type="button" variant="secondary">
+                    <Link
+                      to={`/compras?supplierId=${encodeURIComponent(detail.id)}`}
+                    >
+                      Ver historial de compras
+                    </Link>
+                  </Button>
+                </Dialog.Close>
+              ) : null}
               <Dialog.Close asChild>
                 <Button type="button" variant="secondary">
                   Cerrar

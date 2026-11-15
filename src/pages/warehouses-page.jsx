@@ -10,7 +10,7 @@ import { Plus } from "@phosphor-icons/react/Plus";
 import { Power } from "@phosphor-icons/react/Power";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 import DataTable, { SortableHeading } from "../components/data-table.jsx";
@@ -757,6 +757,42 @@ export default function WarehousesPage() {
               </dl>
             ) : null}
             <div className="module-dialog__actions">
+              {detailsQuery.data &&
+              session.permissions.includes("inventory.read") ? (
+                <Dialog.Close asChild>
+                  <Button asChild type="button" variant="secondary">
+                    <Link
+                      to={`/inventario?warehouseId=${encodeURIComponent(detailsQuery.data.id)}`}
+                    >
+                      Consultar inventario
+                    </Link>
+                  </Button>
+                </Dialog.Close>
+              ) : null}
+              {detailsQuery.data &&
+              session.permissions.includes("sales.read") ? (
+                <Dialog.Close asChild>
+                  <Button asChild type="button" variant="secondary">
+                    <Link
+                      to={`/ventas?warehouseId=${encodeURIComponent(detailsQuery.data.id)}`}
+                    >
+                      Consultar ventas
+                    </Link>
+                  </Button>
+                </Dialog.Close>
+              ) : null}
+              {detailsQuery.data &&
+              session.permissions.includes("purchases.read") ? (
+                <Dialog.Close asChild>
+                  <Button asChild type="button" variant="secondary">
+                    <Link
+                      to={`/compras?warehouseId=${encodeURIComponent(detailsQuery.data.id)}`}
+                    >
+                      Consultar compras
+                    </Link>
+                  </Button>
+                </Dialog.Close>
+              ) : null}
               <Dialog.Close asChild>
                 <Button type="button" variant="secondary">
                   Cerrar
