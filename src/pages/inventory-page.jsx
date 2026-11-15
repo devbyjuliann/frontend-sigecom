@@ -7,6 +7,7 @@ import { ArrowsLeftRight } from "@phosphor-icons/react/ArrowsLeftRight";
 import DataTable from "../components/data-table.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/auth-context.jsx";
 import {
   ApiError,
@@ -112,6 +113,7 @@ function StateMessage({ children, tone = "neutral" }) {
 
 export default function InventoryPage() {
   const { session } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canRead = session.permissions.includes("inventory.read");
   const canReadMovements = session.permissions.includes(
     "inventory.movements.read",
@@ -122,12 +124,20 @@ export default function InventoryPage() {
   const [categoryId, setCategoryId] = useState("");
   const [productStatus, setProductStatus] = useState("active");
   const [stockStatus, setStockStatus] = useState("all");
-  const [warehouseId, setWarehouseId] = useState("");
+  const warehouseId = searchParams.get("warehouseId") || "";
   const [operationType, setOperationType] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  function changeWarehouseId(value) {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set("warehouseId", value);
+    else next.delete("warehouseId");
+    setSearchParams(next, { replace: true });
+    setPage(1);
+  }
 
   const filters = useMemo(
     () => ({
@@ -460,7 +470,7 @@ export default function InventoryPage() {
                 Bodega
                 <select
                   value={warehouseId}
-                  onChange={changeFilter(setWarehouseId)}
+                  onChange={(event) => changeWarehouseId(event.target.value)}
                 >
                   <option value="">Todas las asignadas</option>
                   {(warehousesQuery.data?.items || []).map((warehouse) => (

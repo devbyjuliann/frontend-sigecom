@@ -34,6 +34,7 @@ vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
 
 function renderPage(
   permissions = ["inventory.read", "inventory.movements.read"],
+  path = "/inventario",
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -43,7 +44,7 @@ function renderPage(
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/inventario"]}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/inventario" element={<InventoryPage />} />
         </Routes>
@@ -268,6 +269,22 @@ describe("InventoryPage", () => {
           operationType: "purchase_receipt",
         }),
       ),
+    );
+  });
+
+  it("initializes the inventory warehouse filter from a shareable URL", async () => {
+    warehousesApi.list.mockResolvedValue({
+      items: [{ id: "9", name: "Bodega cerrada", isActive: false }],
+    });
+    renderPage(
+      ["inventory.read", "inventory.movements.read", "warehouses.read"],
+      "/inventario?warehouseId=9",
+    );
+
+    await screen.findByRole("option", { name: "Bodega cerrada (inactiva)" });
+    expect(screen.getByRole("combobox", { name: "Bodega" })).toHaveValue("9");
+    expect(inventoryApi.balances).toHaveBeenCalledWith(
+      expect.objectContaining({ warehouseId: "9" }),
     );
   });
 
