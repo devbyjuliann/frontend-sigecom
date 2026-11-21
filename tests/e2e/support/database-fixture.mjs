@@ -3,6 +3,7 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
+import { createE2EDatabasePool } from "./database-target.mjs";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const backendDirectory = resolve(
@@ -55,10 +56,10 @@ export const testAccounts = [
 ];
 
 export async function provisionTestAccounts() {
+  const pool = createE2EDatabasePool(createDatabasePool);
   const password =
     process.env.SIGECOM_E2E_PASSWORD || randomBytes(32).toString("base64url");
   const passwordHash = await bcrypt.hash(password, 12);
-  const pool = createDatabasePool("test");
 
   try {
     const [[database]] = await pool.query("SELECT DATABASE() AS name");
@@ -118,7 +119,7 @@ export async function provisionTestAccounts() {
 }
 
 export async function deactivateTestAccounts() {
-  const pool = createDatabasePool("test");
+  const pool = createE2EDatabasePool(createDatabasePool);
   try {
     for (const { email } of testAccounts) {
       await pool.execute(

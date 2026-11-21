@@ -4,9 +4,10 @@ import { createDatabasePool } from "../../../backend-sigecom/src/db/pool.js";
 import { createApp } from "../../../backend-sigecom/src/app.js";
 import { getAuthConfig } from "../../../backend-sigecom/src/modules/auth/auth-config.js";
 import { createLogger } from "../../../backend-sigecom/src/shared/logger.js";
+import { createE2EDatabasePool } from "./support/database-target.mjs";
 
 const port = Number(process.env.SIGECOM_E2E_API_PORT || 3002);
-const dbPool = createDatabasePool("test");
+const dbPool = createE2EDatabasePool(createDatabasePool);
 const authConfig = getAuthConfig({
   ...process.env,
   FRONTEND_ORIGIN: `http://127.0.0.1:${process.env.SIGECOM_E2E_FRONTEND_PORT || 5173}`,
