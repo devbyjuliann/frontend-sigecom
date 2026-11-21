@@ -1,6 +1,13 @@
 import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Link,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+} from "react-router-dom";
 import { toast, Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./auth/auth-context.jsx";
 import SessionQueryBoundary from "./auth/session-query-boundary.jsx";
@@ -16,6 +23,21 @@ import {
 
 const AppShell = lazy(() => import("./components/app-shell.jsx"));
 const LoginPage = lazy(() => import("./pages/login-page.jsx"));
+const RequestPasswordRecoveryPage = lazy(() =>
+  import("./pages/password-recovery-pages.jsx").then((pages) => ({
+    default: pages.RequestPasswordRecoveryPage,
+  })),
+);
+const ResetPasswordPage = lazy(() =>
+  import("./pages/password-recovery-pages.jsx").then((pages) => ({
+    default: pages.ResetPasswordPage,
+  })),
+);
+const AcceptInvitationPage = lazy(() =>
+  import("./pages/password-recovery-pages.jsx").then((pages) => ({
+    default: pages.AcceptInvitationPage,
+  })),
+);
 const HomePage = lazy(() => import("./pages/dashboard-page.jsx"));
 const AccessDeniedPage = lazy(() =>
   import("./pages/protected-pages.jsx").then((pages) => ({
@@ -81,6 +103,14 @@ function NotFoundPage() {
   );
 }
 
+function ScopedRouteBoundary() {
+  return (
+    <SessionQueryBoundary>
+      <Outlet />
+    </SessionQueryBoundary>
+  );
+}
+
 function AppRoutes() {
   return (
     <Suspense
@@ -94,110 +124,120 @@ function AppRoutes() {
         <Route element={<RedirectIfAuthenticated />}>
           <Route path="/ingresar" element={<LoginPage />} />
         </Route>
-        <Route element={<RequireAuth />}>
-          <Route
-            path="/cambio-obligatorio"
-            element={<RequiredPasswordPage />}
-          />
-          <Route path="/acceso-denegado" element={<AccessDeniedPage />} />
-          <Route element={<RequirePermission permission="dashboard.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/inicio" element={<HomePage />} />
+        <Route
+          path="/recuperar-contrasena"
+          element={<RequestPasswordRecoveryPage />}
+        />
+        <Route path="/restablecer-contrasena" element={<ResetPasswordPage />} />
+        <Route path="/aceptar-invitacion" element={<AcceptInvitationPage />} />
+        <Route element={<ScopedRouteBoundary />}>
+          <Route element={<RequireAuth />}>
+            <Route
+              path="/cambio-obligatorio"
+              element={<RequiredPasswordPage />}
+            />
+            <Route path="/acceso-denegado" element={<AccessDeniedPage />} />
+            <Route element={<RequirePermission permission="dashboard.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/inicio" element={<HomePage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="profile.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/perfil" element={<ProfilePage />} />
+            <Route element={<RequirePermission permission="profile.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/perfil" element={<ProfilePage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequireUserAdministration />}>
-            <Route element={<AppShell />}>
-              <Route path="/usuarios" element={<UsersPage />} />
+            <Route element={<RequireUserAdministration />}>
+              <Route element={<AppShell />}>
+                <Route path="/usuarios" element={<UsersPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequireRoleAdministration />}>
-            <Route element={<AppShell />}>
-              <Route
-                path="/administracion/roles"
-                element={<RolesPermissionsPage />}
-              />
+            <Route element={<RequireRoleAdministration />}>
+              <Route element={<AppShell />}>
+                <Route
+                  path="/administracion/roles"
+                  element={<RolesPermissionsPage />}
+                />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequireAuditAccess />}>
-            <Route element={<AppShell />}>
-              <Route path="/auditoria" element={<AuditPage />} />
+            <Route element={<RequireAuditAccess />}>
+              <Route element={<AppShell />}>
+                <Route path="/auditoria" element={<AuditPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequireReportsAccess />}>
-            <Route element={<AppShell />}>
-              <Route path="/reportes" element={<ReportsPage />} />
+            <Route element={<RequireReportsAccess />}>
+              <Route element={<AppShell />}>
+                <Route path="/reportes" element={<ReportsPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="categories.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/categorias" element={<CategoriesPage />} />
+            <Route element={<RequirePermission permission="categories.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/categorias" element={<CategoriesPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="warehouses.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/bodegas" element={<WarehousesPage />} />
+            <Route element={<RequirePermission permission="warehouses.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/bodegas" element={<WarehousesPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="products.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/productos" element={<ProductsPage />} />
+            <Route element={<RequirePermission permission="products.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/productos" element={<ProductsPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route
-            element={
-              <RequirePermission
-                permission={["inventory.read", "inventory.movements.read"]}
-              />
-            }
-          >
-            <Route element={<AppShell />}>
-              <Route path="/inventario" element={<InventoryPage />} />
+            <Route
+              element={
+                <RequirePermission
+                  permission={["inventory.read", "inventory.movements.read"]}
+                />
+              }
+            >
+              <Route element={<AppShell />}>
+                <Route path="/inventario" element={<InventoryPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="customers.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/clientes" element={<CustomersPage />} />
+            <Route element={<RequirePermission permission="customers.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/clientes" element={<CustomersPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="suppliers.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/proveedores" element={<SuppliersPage />} />
+            <Route element={<RequirePermission permission="suppliers.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/proveedores" element={<SuppliersPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="purchases.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/compras" element={<PurchasesPage />} />
-              <Route path="/compras/:id" element={<PurchaseDetailPage />} />
+            <Route element={<RequirePermission permission="purchases.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/compras" element={<PurchasesPage />} />
+                <Route path="/compras/:id" element={<PurchaseDetailPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="purchases.create" />}>
-            <Route element={<AppShell />}>
-              <Route path="/compras/nueva" element={<PurchaseFormPage />} />
-              <Route
-                path="/compras/:id/editar"
-                element={<PurchaseFormPage />}
-              />
+            <Route
+              element={<RequirePermission permission="purchases.create" />}
+            >
+              <Route element={<AppShell />}>
+                <Route path="/compras/nueva" element={<PurchaseFormPage />} />
+                <Route
+                  path="/compras/:id/editar"
+                  element={<PurchaseFormPage />}
+                />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="sales.read" />}>
-            <Route element={<AppShell />}>
-              <Route path="/ventas" element={<SalesPage />} />
-              <Route path="/ventas/:id" element={<SaleDetailPage />} />
+            <Route element={<RequirePermission permission="sales.read" />}>
+              <Route element={<AppShell />}>
+                <Route path="/ventas" element={<SalesPage />} />
+                <Route path="/ventas/:id" element={<SaleDetailPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route element={<RequirePermission permission="sales.create" />}>
-            <Route element={<AppShell />}>
-              <Route path="/ventas/nueva" element={<SaleFormPage />} />
-              <Route path="/ventas/:id/editar" element={<SaleFormPage />} />
+            <Route element={<RequirePermission permission="sales.create" />}>
+              <Route element={<AppShell />}>
+                <Route path="/ventas/nueva" element={<SaleFormPage />} />
+                <Route path="/ventas/:id/editar" element={<SaleFormPage />} />
+              </Route>
             </Route>
+            <Route path="/" element={<Navigate to="/inicio" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
-          <Route path="/" element={<Navigate to="/inicio" replace />} />
-          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </Suspense>
@@ -232,15 +272,13 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <SessionQueryBoundary>
-            <AppRoutes />
-            <PendingOperationStorageNotice />
-            <Toaster
-              position="bottom-right"
-              closeButton
-              toastOptions={{ className: "sigecom-toast" }}
-            />
-          </SessionQueryBoundary>
+          <AppRoutes />
+          <PendingOperationStorageNotice />
+          <Toaster
+            position="bottom-right"
+            closeButton
+            toastOptions={{ className: "sigecom-toast" }}
+          />
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

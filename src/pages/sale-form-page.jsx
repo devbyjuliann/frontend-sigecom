@@ -14,6 +14,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useAuth } from "../auth/auth-context.jsx";
+import { fetchWarehouseOptions } from "../lib/warehouse-options.js";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
 import {
@@ -144,13 +145,7 @@ export default function SaleFormPage() {
   const warehouses = useQuery({
     queryKey: ["sale-warehouses"],
     queryFn: () =>
-      warehousesApi.list({
-        page: 1,
-        pageSize: 100,
-        status: "active",
-        sortBy: "name",
-        sortOrder: "asc",
-      }),
+      fetchWarehouseOptions(warehousesApi.list, { status: "active" }),
     retry: false,
   });
   const products = useQuery({
@@ -477,18 +472,37 @@ export default function SaleFormPage() {
             </div>
             <div className="purchase-field">
               <label htmlFor="sale-warehouse">Bodega</label>
-              <select id="sale-warehouse" {...register("warehouseId")}>
-                <option value="">Selecciona una bodega</option>
-                {(warehouses.data?.items || []).map((warehouse) => (
+              <select
+                id="sale-warehouse"
+                disabled={warehouses.isPending || warehouses.isError}
+                {...register("warehouseId")}
+              >
+                <option value="">
+                  {warehouses.isPending
+                    ? "Cargando bodegas…"
+                    : warehouses.isError
+                      ? "No se pudieron cargar las bodegas"
+                      : "Selecciona una bodega"}
+                </option>
+                {(warehouses.data || []).map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>
                     {warehouse.name}
                   </option>
                 ))}
               </select>
               {warehouses.isError ? (
-                <small className="purchase-field-error">
-                  No se pudieron cargar bodegas autorizadas.
-                </small>
+                <>
+                  <small className="purchase-field-error">
+                    No se pudieron cargar bodegas autorizadas.
+                  </small>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => warehouses.refetch()}
+                  >
+                    Reintentar bodegas
+                  </Button>
+                </>
               ) : null}
               {errors.warehouseId ? (
                 <small className="purchase-field-error">

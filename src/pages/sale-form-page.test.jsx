@@ -25,7 +25,7 @@ vi.mock("../lib/auth-api.js", () => ({
 }));
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
 
-function renderForm() {
+function renderForm(warehousePages = null) {
   const session = {
     user: { id: "seller-A", role: "seller", passwordChangeRequired: false },
     permissions: ["sales.create", "sales.read"],
@@ -44,8 +44,14 @@ function renderForm() {
     ],
     pagination: { page: 1, pageCount: 1 },
   });
-  warehousesApi.list.mockResolvedValue({
-    items: [{ id: "8", name: "Bodega Norte" }],
+  warehousesApi.list.mockImplementation(({ page }) => {
+    const result = warehousePages?.[page] || {
+      items: [{ id: "8", name: "Bodega Norte" }],
+      pagination: { page: 1, pageSize: 100, total: 1, pageCount: 1 },
+    };
+    return result instanceof Error
+      ? Promise.reject(result)
+      : Promise.resolve(result);
   });
   productsApi.list.mockResolvedValue({
     items: [
@@ -125,5 +131,44 @@ describe("SaleFormPage", () => {
     });
     expect(salesApi.create.mock.calls[0][1]).toEqual(expect.any(String));
     expect(await screen.findByText("Detalle")).toBeInTheDocument();
+  });
+
+  it("permite seleccionar una bodega activa autorizada en la segunda página", async () => {
+    const first = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      name: `Bodega ${index + 1}`,
+    }));
+    renderForm({
+      1: {
+        items: first,
+        pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+      },
+      2: {
+        items: [{ id: "101", name: "Bodega Final" }],
+        pagination: { page: 2, pageSize: 100, total: 101, pageCount: 2 },
+      },
+    });
+    expect(
+      await screen.findByRole("option", { name: "Bodega Final" }),
+    ).toHaveValue("101");
+  });
+
+  it("permite reintentar si no puede cargar las bodegas de la venta", async () => {
+    renderForm({ 1: new Error("sin red") });
+    const select = screen.getByRole("combobox", { name: "Bodega" });
+    expect(
+      await screen.findByRole("button", { name: "Reintentar bodegas" }),
+    ).toBeInTheDocument();
+    expect(select).toBeDisabled();
+    warehousesApi.list.mockResolvedValue({
+      items: [{ id: "8", name: "Bodega Norte" }],
+      pagination: { page: 1, pageSize: 100, total: 1, pageCount: 1 },
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Reintentar bodegas" }),
+    );
+    expect(
+      await screen.findByRole("option", { name: "Bodega Norte" }),
+    ).toHaveValue("8");
   });
 });

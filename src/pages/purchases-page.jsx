@@ -12,6 +12,7 @@ import DataTable, { SortableHeading } from "../components/data-table.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { ApiError, purchasesApi, warehousesApi } from "../lib/auth-api.js";
+import { fetchWarehouseOptions } from "../lib/warehouse-options.js";
 
 const column = createColumnHelper();
 function formatMoney(value) {
@@ -160,14 +161,7 @@ export default function PurchasesPage() {
   );
   const warehouses = useQuery({
     queryKey: ["purchase-order-warehouses"],
-    queryFn: () =>
-      warehousesApi.list({
-        page: 1,
-        pageSize: 100,
-        status: "all",
-        sortBy: "name",
-        sortOrder: "asc",
-      }),
+    queryFn: () => fetchWarehouseOptions(warehousesApi.list, { status: "all" }),
     enabled: session.permissions.includes("warehouses.read"),
     retry: false,
   });
@@ -351,21 +345,43 @@ export default function PurchasesPage() {
             </select>
           </label>
           {session.permissions.includes("warehouses.read") ? (
-            <label className="purchase-status-filter">
-              Bodega
+            <div className="purchase-status-filter">
+              <label htmlFor="purchase-list-warehouse">Bodega</label>
               <select
+                id="purchase-list-warehouse"
                 value={warehouseId}
+                disabled={warehouses.isPending || warehouses.isError}
                 onChange={(event) => change("warehouseId", event.target.value)}
               >
-                <option value="">Todas las asignadas</option>
-                {(warehouses.data?.items || []).map((warehouse) => (
+                <option value="">
+                  {warehouses.isPending
+                    ? "Cargando bodegas…"
+                    : warehouses.isError
+                      ? "No se pudieron cargar las bodegas"
+                      : "Todas las asignadas"}
+                </option>
+                {(warehouses.data || []).map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>
                     {warehouse.name}
                     {warehouse.isActive ? "" : " (inactiva)"}
                   </option>
                 ))}
               </select>
-            </label>
+              {warehouses.isError ? (
+                <>
+                  <span role="alert">
+                    No se pudieron cargar las bodegas para filtrar.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => warehouses.refetch()}
+                  >
+                    Reintentar bodegas
+                  </Button>
+                </>
+              ) : null}
+            </div>
           ) : null}
           <label className="purchase-status-filter">
             Desde

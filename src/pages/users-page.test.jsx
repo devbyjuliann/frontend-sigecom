@@ -24,6 +24,7 @@ vi.mock("../lib/auth-api.js", async (importOriginal) => {
       update: vi.fn(),
       setStatus: vi.fn(),
       resetPassword: vi.fn(),
+      resendInvitation: vi.fn(),
     },
     warehousesApi: { list: vi.fn() },
   };
@@ -39,6 +40,7 @@ const user = {
   roleName: "Vendedor",
   isActive: true,
   passwordChangeRequired: false,
+  credentialState: "active",
   warehouseCount: 1,
   visibleWarehouseCount: 1,
   canManage: true,
@@ -99,11 +101,61 @@ describe("UsersPage", () => {
     vi.clearAllMocks();
   });
 
-  it("lists users and creates a temporary credential outside query and mutation caches", async () => {
+  it("creates an invited account without exposing or caching a password", async () => {
     const { queryClient } = renderPage();
     expect(
       await screen.findByRole("row", { name: /Ana Gómez/ }),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo usuario" }));
+    expect(
+      screen.getByText(
+        "Al crearla, enviaremos una invitación al correo registrado. La persona deberá definir su contraseña antes de ingresar.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Nombre completo"), {
+      target: { value: "Lucía Pérez" },
+    });
+    fireEvent.change(screen.getByLabelText("Correo electrónico"), {
+      target: { value: "lucia@sigecom.co" },
+    });
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /Bodega Central/ }),
+    );
+    usersApi.create.mockResolvedValueOnce({
+      user: {
+        ...user,
+        id: "43",
+        email: "lucia@sigecom.co",
+        displayName: "Lucía Pérez",
+        credentialState: "pending_invitation",
+      },
+      invitation: { deliveryStatus: "accepted" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Crear usuario" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /invitación enviada/i,
+    );
+    expect(screen.queryByText(/contraseña temporal/i)).not.toBeInTheDocument();
+    expect(usersApi.create).toHaveBeenCalledWith({
+      email: "lucia@sigecom.co",
+      displayName: "Lucía Pérez",
+      roleCode: "seller",
+      warehouseIds: ["3"],
+    });
+    const cached = JSON.stringify(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.state.data),
+    );
+    expect(cached).not.toContain("temporaryPassword");
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
+  });
+
+  it("does not claim that a simulated invitation was emailed", async () => {
+    renderPage();
+    await screen.findByRole("row", { name: /Ana Gómez/ });
     fireEvent.click(screen.getByRole("button", { name: "Nuevo usuario" }));
     fireEvent.change(screen.getByLabelText("Nombre completo"), {
       target: { value: "Lucía Pérez" },
@@ -120,39 +172,54 @@ describe("UsersPage", () => {
         id: "43",
         email: "lucia@sigecom.co",
         displayName: "Lucía Pérez",
+        credentialState: "pending_invitation",
       },
-      temporaryPassword: "one-time-generated-secret",
+      invitation: { deliveryStatus: "simulated" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Crear usuario" }));
 
-    expect(
-      await screen.findByText("one-time-generated-secret"),
-    ).toBeInTheDocument();
-    expect(usersApi.create).toHaveBeenCalledWith({
-      email: "lucia@sigecom.co",
-      displayName: "Lucía Pérez",
-      roleCode: "seller",
-      warehouseIds: ["3"],
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /simulado.*no se envió/i,
+    );
+  });
+
+  it("allows an administrator to resend an expired pending invitation", async () => {
+    usersApi.list.mockResolvedValueOnce({
+      items: [
+        {
+          ...user,
+          credentialState: "pending_invitation",
+          isActive: true,
+        },
+      ],
+      pagination: { page: 1, pageSize: 10, total: 1, pageCount: 1 },
     });
-    const cached = JSON.stringify(
-      queryClient
-        .getQueryCache()
-        .getAll()
-        .map((query) => query.state.data),
-    );
-    expect(cached).not.toContain("one-time-generated-secret");
-    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
+    usersApi.get.mockResolvedValueOnce({
+      ...user,
+      credentialState: "pending_invitation",
+      revision: "invitation-revision-current",
+    });
+    usersApi.resendInvitation.mockResolvedValueOnce({
+      user: { ...user, credentialState: "pending_invitation" },
+      invitation: { deliveryStatus: "accepted" },
+    });
+    renderPage();
+
+    await screen.findByRole("row", { name: /Ana Gómez/ });
+    expect(screen.getByText("Invitación pendiente")).toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: "Cerrar entrega segura" }),
+      screen.getByRole("button", {
+        name: "Reenviar invitación a Ana Gómez",
+      }),
     );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Descartar contraseña" }),
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /invitación enviada/i,
     );
-    await waitFor(() =>
-      expect(
-        screen.queryByText("one-time-generated-secret"),
-      ).not.toBeInTheDocument(),
-    );
+    expect(usersApi.resendInvitation).toHaveBeenCalledWith("42", {
+      expectedRevision: "invitation-revision-current",
+      confirmResend: true,
+    });
   });
 
   it("keeps account status read-only when its warehouse scope exceeds the administrator's", async () => {
@@ -206,7 +273,7 @@ describe("UsersPage", () => {
     );
   });
 
-  it("confirms a password reset and keeps the generated secret out of query caches", async () => {
+  it("confirms an emailed password reset without revealing a temporary password", async () => {
     const { queryClient } = renderPage();
     usersApi.get.mockResolvedValueOnce({
       ...user,
@@ -223,16 +290,16 @@ describe("UsersPage", () => {
     ).toHaveTextContent("Ana Gómez");
     expect(usersApi.resetPassword).not.toHaveBeenCalled();
     usersApi.resetPassword.mockResolvedValueOnce({
-      user: { ...user, passwordChangeRequired: true },
-      temporaryPassword: "temporary-reset-secret",
+      user: { ...user, credentialState: "pending_admin_reset" },
+      deliveryStatus: "accepted",
       revokedSessions: 2,
     });
     fireEvent.click(
       screen.getByRole("button", { name: "Confirmar restablecimiento" }),
     );
-    expect(
-      await screen.findByText("temporary-reset-secret"),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /enviado.*correo/i,
+    );
     expect(usersApi.resetPassword).toHaveBeenCalledWith("42", {
       expectedRevision: "revision-current",
       confirmReset: true,
@@ -244,7 +311,7 @@ describe("UsersPage", () => {
           .getAll()
           .map((query) => query.state.data),
       ),
-    ).not.toContain("temporary-reset-secret");
+    ).not.toContain("temporaryPassword");
     expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
     expect(usersApi.resetPassword).toHaveBeenCalledTimes(1);
   });

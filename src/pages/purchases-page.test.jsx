@@ -1,10 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PurchasesPage from "./purchases-page.jsx";
-import { purchasesApi } from "../lib/auth-api.js";
+import { purchasesApi, warehousesApi } from "../lib/auth-api.js";
 import { useAuth } from "../auth/auth-context.jsx";
 
 vi.mock("../lib/auth-api.js", () => ({
@@ -16,6 +22,7 @@ vi.mock("../lib/auth-api.js", () => ({
     confirm: vi.fn(),
     cancel: vi.fn(),
   },
+  warehousesApi: { list: vi.fn() },
 }));
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
 
@@ -53,6 +60,8 @@ function renderPage(
       ],
     },
   ],
+  permissions = ["purchases.read", "purchases.create"],
+  warehousePages = null,
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -60,12 +69,21 @@ function renderPage(
   useAuth.mockReturnValue({
     session: {
       user: { role: "administrator" },
-      permissions: ["purchases.read", "purchases.create"],
+      permissions,
     },
   });
   purchasesApi.list.mockResolvedValue({
     items,
     pagination: { page: 1, pageSize: 20, total: items.length, pageCount: 1 },
+  });
+  warehousesApi.list.mockImplementation(({ page }) => {
+    const result = warehousePages?.[page] || {
+      items: [],
+      pagination: { page: 1, pageSize: 100, total: 0, pageCount: 0 },
+    };
+    return result instanceof Error
+      ? Promise.reject(result)
+      : Promise.resolve(result);
   });
   return render(
     <QueryClientProvider client={client}>
@@ -82,6 +100,70 @@ describe("PurchasesPage", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("incluye bodegas asignadas de la segunda página en el filtro de compras", async () => {
+    const first = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      name: `Bodega ${index + 1}`,
+      isActive: true,
+    }));
+    renderPage("/compras", undefined, ["purchases.read", "warehouses.read"], {
+      1: {
+        items: first,
+        pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+      },
+      2: {
+        items: [{ id: "101", name: "Bodega Final", isActive: true }],
+        pagination: { page: 2, pageSize: 100, total: 101, pageCount: 2 },
+      },
+    });
+    expect(
+      await screen.findByRole("option", { name: "Bodega Final" }),
+    ).toHaveValue("101");
+  });
+
+  it("bloquea el filtro incompleto y permite reintentar la carga de compras", async () => {
+    const first = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      name: `Bodega ${index + 1}`,
+      isActive: true,
+    }));
+    renderPage("/compras", undefined, ["purchases.read", "warehouses.read"], {
+      1: {
+        items: first,
+        pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+      },
+      2: new Error("sin red"),
+    });
+    const filter = screen.getByRole("combobox", { name: "Bodega" });
+    expect(
+      await screen.findByRole("button", { name: "Reintentar bodegas" }),
+    ).toBeInTheDocument();
+    expect(filter).toBeDisabled();
+    expect(
+      within(filter).queryByRole("option", { name: "Bodega 1" }),
+    ).toBeNull();
+    warehousesApi.list.mockImplementation(({ page }) =>
+      Promise.resolve(
+        page === 1
+          ? {
+              items: first,
+              pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+            }
+          : {
+              items: [{ id: "101", name: "Bodega Final", isActive: true }],
+              pagination: { page: 2, pageSize: 100, total: 101, pageCount: 2 },
+            },
+      ),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Reintentar bodegas" }),
+    );
+    await waitFor(() => expect(filter).toBeEnabled());
+    expect(
+      within(filter).getByRole("option", { name: "Bodega Final" }),
+    ).toHaveValue("101");
   });
 
   it("shows real purchase orders, COP amounts, and a contextual create action", async () => {

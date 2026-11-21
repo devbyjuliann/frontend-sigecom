@@ -148,6 +148,14 @@ export function AuthProvider({ children }) {
     }
   }, [clearPendingStorage, queryClient]);
 
+  const clearSessionAfterPasswordRecovery = useCallback(async () => {
+    clearPendingStorage();
+    setLocallyLoggedOut(true);
+    setSessionGeneration((generation) => generation + 1);
+    await queryClient.cancelQueries({ queryKey: authQueryKey });
+    queryClient.clear();
+  }, [clearPendingStorage, queryClient]);
+
   const login = useCallback(
     async (credentials) => {
       clearPendingStorage();
@@ -183,6 +191,7 @@ export function AuthProvider({ children }) {
       changePassword: passwordChangeMutation.mutateAsync,
       isChangingPassword: passwordChangeMutation.isPending,
       logout,
+      clearSessionAfterPasswordRecovery,
       handleUnauthorized,
       updateSession,
       reloadSession: sessionQuery.refetch,
@@ -202,6 +211,7 @@ export function AuthProvider({ children }) {
       passwordChangeMutation.mutateAsync,
       passwordChangeMutation.isPending,
       logout,
+      clearSessionAfterPasswordRecovery,
       login,
       handleUnauthorized,
       updateSession,

@@ -129,12 +129,39 @@ describe("InventoryPage", () => {
         { id: "22", name: "Abarrotes", isActive: true },
       ],
     });
-    warehousesApi.list.mockResolvedValue({ items: [] });
+    warehousesApi.list.mockResolvedValue({
+      items: [],
+      pagination: { page: 1, pageSize: 100, total: 0, pageCount: 0 },
+    });
   });
 
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("muestra una bodega autorizada tras la primera página del filtro", async () => {
+    warehousesApi.list.mockImplementation(({ page }) =>
+      Promise.resolve(
+        page === 1
+          ? {
+              items: Array.from({ length: 100 }, (_, index) => ({
+                id: String(index + 1),
+                name: `Bodega ${index + 1}`,
+                isActive: true,
+              })),
+              pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+            }
+          : {
+              items: [{ id: "101", name: "Bodega Final", isActive: true }],
+              pagination: { page: 2, pageSize: 100, total: 101, pageCount: 2 },
+            },
+      ),
+    );
+    renderPage(["inventory.read", "warehouses.read"]);
+    expect(
+      await screen.findByRole("option", { name: "Bodega Final" }),
+    ).toHaveValue("101");
   });
 
   it("shows registered zero balances separately from unregistered balances", async () => {
@@ -165,6 +192,7 @@ describe("InventoryPage", () => {
         { id: "4", name: "Bodega Centro", isActive: true },
         { id: "9", name: "Bodega cerrada", isActive: false },
       ],
+      pagination: { page: 1, pageSize: 100, total: 2, pageCount: 1 },
     });
     renderPage([
       "inventory.read",
@@ -275,6 +303,7 @@ describe("InventoryPage", () => {
   it("initializes the inventory warehouse filter from a shareable URL", async () => {
     warehousesApi.list.mockResolvedValue({
       items: [{ id: "9", name: "Bodega cerrada", isActive: false }],
+      pagination: { page: 1, pageSize: 100, total: 1, pageCount: 1 },
     });
     renderPage(
       ["inventory.read", "inventory.movements.read", "warehouses.read"],
@@ -348,11 +377,51 @@ describe("InventoryPage", () => {
   it("labels inactive warehouses in the authorized selector", async () => {
     warehousesApi.list.mockResolvedValue({
       items: [{ id: "9", name: "Bodega cerrada", isActive: false }],
+      pagination: { page: 1, pageSize: 100, total: 1, pageCount: 1 },
     });
     renderPage(["inventory.read", "warehouses.read"]);
     expect(
       await screen.findByRole("option", { name: "Bodega cerrada (inactiva)" }),
     ).toBeInTheDocument();
+  });
+
+  it("permite reintentar el filtro sin mostrar opciones de una página parcial", async () => {
+    const first = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      name: `Bodega ${index + 1}`,
+      isActive: true,
+    }));
+    warehousesApi.list.mockImplementation(({ page }) =>
+      page === 1
+        ? Promise.resolve({
+            items: first,
+            pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+          })
+        : Promise.reject(new Error("sin red")),
+    );
+    renderPage(["inventory.read", "warehouses.read"]);
+    const filter = screen.getByRole("combobox", { name: "Bodega" });
+    await screen.findByRole("button", { name: "Reintentar bodegas" });
+    expect(filter).toBeDisabled();
+    expect(screen.queryByRole("option", { name: "Bodega 1" })).toBeNull();
+    warehousesApi.list.mockImplementation(({ page }) =>
+      Promise.resolve(
+        page === 1
+          ? {
+              items: first,
+              pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+            }
+          : {
+              items: [{ id: "101", name: "Bodega Final", isActive: true }],
+              pagination: { page: 2, pageSize: 100, total: 101, pageCount: 2 },
+            },
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar bodegas" }));
+    expect(
+      await screen.findByRole("option", { name: "Bodega Final" }),
+    ).toHaveValue("101");
+    expect(filter).toBeEnabled();
   });
 
   it("shows actionable errors when inventory or warehouse filters fail to load", async () => {

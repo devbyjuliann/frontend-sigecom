@@ -147,6 +147,27 @@ export const authApi = {
       csrfToken = "";
     }
   },
+  requestPasswordRecovery(email) {
+    return post("/api/v1/auth/password-recovery", { email });
+  },
+  async completePasswordRecovery(input) {
+    const result = await post("/api/v1/auth/password-recovery/complete", input);
+    csrfToken = "";
+    return result;
+  },
+  async completeInvitation(input) {
+    const result = await post("/api/v1/auth/invitations/complete", input);
+    csrfToken = "";
+    return result;
+  },
+  async completeAdminPasswordReset(input) {
+    const result = await post(
+      "/api/v1/auth/admin-password-reset/complete",
+      input,
+    );
+    csrfToken = "";
+    return result;
+  },
   async getProfile() {
     return get("/api/v1/profile");
   },
@@ -254,6 +275,12 @@ export const usersApi = {
   resetPassword(id, input) {
     return post(
       `/api/v1/users/${encodeURIComponent(id)}/password-reset`,
+      input,
+    );
+  },
+  resendInvitation(id, input) {
+    return post(
+      `/api/v1/users/${encodeURIComponent(id)}/invitation/resend`,
       input,
     );
   },

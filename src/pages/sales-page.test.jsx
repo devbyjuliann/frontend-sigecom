@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import SalesPage from "./sales-page.jsx";
@@ -26,6 +32,7 @@ function renderSales(
   ],
   permissions = ["sales.read", "sales.create"],
   path = "/ventas",
+  warehousePages = null,
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -35,7 +42,15 @@ function renderSales(
     items,
     pagination: { page: 1, pageSize: 20, total: items.length, pageCount: 1 },
   });
-  warehousesApi.list.mockResolvedValue({ items: [] });
+  warehousesApi.list.mockImplementation(({ page }) => {
+    const result = warehousePages?.[page] || {
+      items: [],
+      pagination: { page, pageSize: 100, total: 0, pageCount: 0 },
+    };
+    return result instanceof Error
+      ? Promise.reject(result)
+      : Promise.resolve(result);
+  });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
@@ -105,5 +120,61 @@ describe("SalesPage", () => {
       expect.objectContaining({ customerId: "44" }),
     );
     expect(screen.getByText("Filtrando por cliente #44")).toBeInTheDocument();
+  });
+
+  it("permite filtrar ventas por una bodega autorizada fuera de la primera página", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      name: `Bodega ${index + 1}`,
+    }));
+    renderSales(undefined, ["sales.read"], "/ventas", {
+      1: {
+        items: firstPage,
+        pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+      },
+      2: {
+        items: [{ id: "101", name: "Bodega Final" }],
+        pagination: { page: 2, pageSize: 100, total: 101, pageCount: 2 },
+      },
+    });
+
+    const filter = screen.getByRole("combobox", { name: "Filtrar por bodega" });
+    expect(
+      await within(filter).findByRole("option", { name: "Bodega Final" }),
+    ).toHaveValue("101");
+  });
+
+  it("permite reintentar si falla una página de bodegas sin ofrecer una lista incompleta", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      name: `Bodega ${index + 1}`,
+    }));
+    const pages = {
+      1: {
+        items: firstPage,
+        pagination: { page: 1, pageSize: 100, total: 101, pageCount: 2 },
+      },
+      2: new Error("Sin conexión"),
+    };
+    renderSales(undefined, ["sales.read"], "/ventas", pages);
+    expect(
+      await screen.findByText(
+        "No se pudieron cargar las bodegas para filtrar.",
+      ),
+    ).toBeInTheDocument();
+    const filter = screen.getByRole("combobox", { name: "Filtrar por bodega" });
+    expect(filter).toBeDisabled();
+    expect(
+      within(filter).queryByRole("option", { name: "Central" }),
+    ).toBeNull();
+
+    pages[2] = {
+      items: [{ id: "101", name: "Norte" }],
+      pagination: { page: 2, pageSize: 100, total: 101, pageCount: 2 },
+    };
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar bodegas" }));
+    expect(
+      await within(filter).findByRole("option", { name: "Norte" }),
+    ).toHaveValue("101");
   });
 });

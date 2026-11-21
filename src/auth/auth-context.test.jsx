@@ -190,6 +190,83 @@ function CacheRetentionProbe({ privateRequest }) {
   );
 }
 
+function RecoverySessionProbe() {
+  const { session, pendingStorageLease, clearSessionAfterPasswordRecovery } =
+    useAuth();
+  return (
+    <>
+      <p>Cuenta: {session?.user.id || "sin sesión"}</p>
+      <p>
+        Pendiente:{" "}
+        {readPendingOperation(pendingStorageLease, "purchaseReceipt", "12")
+          ?.key || "ninguno"}
+      </p>
+      <button
+        onClick={() =>
+          writePendingOperation(pendingStorageLease, "purchaseReceipt", "12", {
+            key: "pending-from-A",
+          })
+        }
+      >
+        Crear pendiente
+      </button>
+      <button onClick={() => clearSessionAfterPasswordRecovery()}>
+        Completar recuperación
+      </button>
+    </>
+  );
+}
+
+it("clears authenticated query data and pending operations after password recovery", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const accountA = {
+    user: {
+      id: "account-A",
+      role: "administrator",
+      passwordChangeRequired: false,
+    },
+    permissions: ["purchases.read"],
+    warehouseIds: ["warehouse-A"],
+  };
+  vi.spyOn(authApi, "me")
+    .mockResolvedValueOnce(accountA)
+    .mockRejectedValue(
+      new ApiError({
+        status: 401,
+        code: "SESSION_INVALID",
+        message: "La sesión venció.",
+      }),
+    );
+
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <SessionQueryBoundary>
+          <RecoverySessionProbe />
+        </SessionQueryBoundary>
+      </AuthProvider>
+    </QueryClientProvider>,
+  );
+
+  await screen.findByText("Cuenta: account-A");
+  fireEvent.click(screen.getByRole("button", { name: "Crear pendiente" }));
+  client.setQueryData(["private", "sales"], { owner: "account-A" });
+  expect(sessionStorage.length).toBeGreaterThan(0);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Completar recuperación" }),
+  );
+
+  await screen.findByText("Cuenta: sin sesión");
+  await waitFor(() =>
+    expect(client.getQueryData(["private", "sales"])).toBeUndefined(),
+  );
+  expect(screen.getByText("Pendiente: ninguno")).toBeInTheDocument();
+  expect(sessionStorage.length).toBe(0);
+  client.clear();
+});
+
 it("clears every cached private query after server logout", async () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },

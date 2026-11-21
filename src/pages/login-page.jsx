@@ -4,7 +4,7 @@ import { Eye } from "@phosphor-icons/react/Eye";
 import { EyeSlash } from "@phosphor-icons/react/EyeSlash";
 import { SpinnerGap } from "@phosphor-icons/react/SpinnerGap";
 import { useForm } from "react-hook-form";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
@@ -215,6 +215,10 @@ export default function LoginPage() {
               {isLoggingIn ? "Validando acceso…" : "Ingresar"}
             </Button>
           </form>
+
+          <Link className="login-recovery-link" to="/recuperar-contrasena">
+            ¿Olvidaste tu contraseña?
+          </Link>
 
           <p className="login-security-note">
             El acceso está administrado por la empresa. Si necesitas ayuda,

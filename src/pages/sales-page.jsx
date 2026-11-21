@@ -8,6 +8,7 @@ import { useAuth } from "../auth/auth-context.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { salesApi, warehousesApi } from "../lib/auth-api.js";
+import { fetchWarehouseOptions } from "../lib/warehouse-options.js";
 
 function formatMoney(value) {
   const [whole, fractional = "00"] = String(value).split(".");
@@ -64,14 +65,7 @@ export default function SalesPage() {
   });
   const warehouses = useQuery({
     queryKey: ["sales-filter-warehouses"],
-    queryFn: () =>
-      warehousesApi.list({
-        page: 1,
-        pageSize: 100,
-        status: "all",
-        sortBy: "name",
-        sortOrder: "asc",
-      }),
+    queryFn: () => fetchWarehouseOptions(warehousesApi.list, { status: "all" }),
     retry: false,
   });
   const canCreate = session.permissions.includes("sales.create");
@@ -160,23 +154,45 @@ export default function SalesPage() {
               <option value="cancelled">Canceladas</option>
             </select>
           </label>
-          <label className="purchase-status-filter">
-            Bodega
+          <div className="purchase-status-filter">
+            <label htmlFor="sales-warehouse-filter">Bodega</label>
             <select
+              id="sales-warehouse-filter"
               aria-label="Filtrar por bodega"
               value={filters.warehouseId}
+              disabled={warehouses.isPending || warehouses.isError}
               onChange={(event) =>
                 updateFilters({ warehouseId: event.target.value })
               }
             >
-              <option value="">Todas las autorizadas</option>
-              {(warehouses.data?.items || []).map((warehouse) => (
+              <option value="">
+                {warehouses.isPending
+                  ? "Cargando bodegas…"
+                  : warehouses.isError
+                    ? "No se pudieron cargar las bodegas"
+                    : "Todas las autorizadas"}
+              </option>
+              {(warehouses.data || []).map((warehouse) => (
                 <option key={warehouse.id} value={warehouse.id}>
                   {warehouse.name}
                 </option>
               ))}
             </select>
-          </label>
+            {warehouses.isError ? (
+              <>
+                <span role="alert">
+                  No se pudieron cargar las bodegas para filtrar.
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => warehouses.refetch()}
+                >
+                  Reintentar bodegas
+                </Button>
+              </>
+            ) : null}
+          </div>
           <label className="purchase-status-filter">
             Desde
             <input

@@ -9,6 +9,7 @@ import {
   rolesApi,
   salesApi,
   suppliersApi,
+  usersApi,
   warehousesApi,
 } from "./auth-api.js";
 
@@ -183,6 +184,142 @@ describe("authApi", () => {
       }),
     );
     expect(localStorage.length).toBe(0);
+  });
+
+  it("requests recovery through the CSRF-protected endpoint without persisting account data", async () => {
+    const csrfToken = "h".repeat(64);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken }))
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            accepted: true,
+            message:
+              "Si la cuenta está activa, enviaremos instrucciones al correo registrado.",
+          },
+          { status: 202 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    await authApi.refreshCsrf();
+    await expect(
+      authApi.requestPasswordRecovery("ana@sigecom.co"),
+    ).resolves.toMatchObject({ accepted: true });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/auth/password-recovery",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: expect.objectContaining({ "X-CSRF-Token": csrfToken }),
+        body: JSON.stringify({ email: "ana@sigecom.co" }),
+      }),
+    );
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("submits a recovery token once and clears only the in-memory CSRF value after success", async () => {
+    const csrfToken = "i".repeat(64);
+    const token = "R".repeat(43);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken }))
+      .mockResolvedValueOnce(Response.json({ changed: true }))
+      .mockResolvedValueOnce(Response.json({ csrfToken: "j".repeat(64) }))
+      .mockResolvedValueOnce(
+        Response.json({ accepted: true }, { status: 202 }),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    await authApi.refreshCsrf();
+    await expect(
+      authApi.completePasswordRecovery({
+        token,
+        newPassword: "Nueva-Clave-Segura-2026",
+        confirmPassword: "Nueva-Clave-Segura-2026",
+      }),
+    ).resolves.toEqual({ changed: true });
+    await authApi.requestPasswordRecovery("ana@sigecom.co");
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/auth/password-recovery/complete",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "X-CSRF-Token": csrfToken }),
+        body: JSON.stringify({
+          token,
+          newPassword: "Nueva-Clave-Segura-2026",
+          confirmPassword: "Nueva-Clave-Segura-2026",
+        }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/auth/csrf",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("submits invitation acceptance and administrative password reset only with CSRF", async () => {
+    const firstCsrf = "a".repeat(64);
+    const secondCsrf = "b".repeat(64);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken: firstCsrf }))
+      .mockResolvedValueOnce(Response.json({ changed: true }))
+      .mockResolvedValueOnce(Response.json({ csrfToken: secondCsrf }))
+      .mockResolvedValueOnce(Response.json({ changed: true }))
+      .mockResolvedValueOnce(Response.json({ csrfToken: "c".repeat(64) }))
+      .mockResolvedValueOnce(Response.json({ user: {}, invitation: {} }));
+    vi.stubGlobal("fetch", fetch);
+    const credentialInput = {
+      token: "I".repeat(43),
+      newPassword: "Nueva-Clave-Segura-2026",
+      confirmPassword: "Nueva-Clave-Segura-2026",
+    };
+
+    await authApi.refreshCsrf();
+    await authApi.completeInvitation(credentialInput);
+    await authApi.refreshCsrf();
+    await authApi.completeAdminPasswordReset(credentialInput);
+    await usersApi.resendInvitation("42", {
+      expectedRevision: "revision-token-1234567890",
+      confirmResend: true,
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/auth/invitations/complete",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "X-CSRF-Token": firstCsrf }),
+        body: JSON.stringify(credentialInput),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/auth/admin-password-reset/complete",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "X-CSRF-Token": secondCsrf }),
+      }),
+    );
+    expect(fetch.mock.calls.at(-1)[0]).toBe(
+      "/api/v1/users/42/invitation/resend",
+    );
+    expect(fetch.mock.calls.at(-1)[1]).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({ "X-CSRF-Token": "c".repeat(64) }),
+    });
   });
 
   it("loads the own profile and patches only through the CSRF-protected API", async () => {

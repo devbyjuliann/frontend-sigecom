@@ -9,6 +9,7 @@ import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/auth-context.jsx";
+import { fetchWarehouseOptions } from "../lib/warehouse-options.js";
 import {
   ApiError,
   categoriesApi,
@@ -174,8 +175,7 @@ export default function InventoryPage() {
   );
   const warehousesQuery = useQuery({
     queryKey: ["inventory", "warehouse-filters"],
-    queryFn: () =>
-      warehousesApi.list({ page: 1, pageSize: 100, status: "all" }),
+    queryFn: () => fetchWarehouseOptions(warehousesApi.list, { status: "all" }),
     enabled:
       (canRead || canReadMovements) &&
       session.permissions.includes("warehouses.read"),
@@ -466,21 +466,40 @@ export default function InventoryPage() {
             ) : null}
             {(canRead || canReadMovements) &&
             session.permissions.includes("warehouses.read") ? (
-              <label className="inventory-filter">
-                Bodega
+              <div className="inventory-filter">
+                <label htmlFor="inventory-warehouse-filter">Bodega</label>
                 <select
+                  id="inventory-warehouse-filter"
                   value={warehouseId}
+                  disabled={
+                    warehousesQuery.isPending || warehousesQuery.isError
+                  }
                   onChange={(event) => changeWarehouseId(event.target.value)}
                 >
-                  <option value="">Todas las asignadas</option>
-                  {(warehousesQuery.data?.items || []).map((warehouse) => (
+                  <option value="">
+                    {warehousesQuery.isPending
+                      ? "Cargando bodegas…"
+                      : warehousesQuery.isError
+                        ? "No se pudieron cargar las bodegas"
+                        : "Todas las asignadas"}
+                  </option>
+                  {(warehousesQuery.data || []).map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name}
                       {warehouse.isActive ? "" : " (inactiva)"}
                     </option>
                   ))}
                 </select>
-              </label>
+                {warehousesQuery.isError ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => warehousesQuery.refetch()}
+                  >
+                    Reintentar bodegas
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
             {view !== "movements" && canRead ? (
               <>
