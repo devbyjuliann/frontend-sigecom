@@ -16,10 +16,13 @@ test("administrator consults inventory and the responsive layout at four viewpor
   await page.getByRole("textbox", { name: "Contraseña" }).fill(password);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL(/\/inicio$/);
-  await page
-    .getByRole("navigation", { name: "Navegación principal" })
-    .getByRole("link", { name: "Inventario", exact: true })
-    .click();
+  const warehousesResponse = await page.request.get(
+    "/api/v1/warehouses?page=1&pageSize=1&status=all",
+  );
+  expect(warehousesResponse.ok()).toBe(true);
+  const { items: warehouses } = await warehousesResponse.json();
+  expect(warehouses).toHaveLength(1);
+  await page.goto(`/inventario?warehouseId=${warehouses[0].id}`);
   await expect(
     page.getByRole("heading", { name: "Inventario", level: 2 }),
   ).toBeVisible();

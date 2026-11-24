@@ -18,23 +18,14 @@ async function signIn(page, email = administratorEmail) {
 }
 
 async function createFixture(page) {
-  const csrfToken = (await page.context().cookies()).find(
-    (cookie) => cookie.name === "sigecom_csrf",
-  ).value;
-  const headers = { Origin: origin, "X-CSRF-Token": csrfToken };
+  const categoriesResponse = await page.request.get(
+    "/api/v1/categories?page=1&pageSize=100&status=all&sortBy=name",
+  );
+  expect(categoriesResponse.ok()).toBe(true);
+  const { items: categories } = await categoriesResponse.json();
+  expect(categories.length).toBeGreaterThan(0);
   const suffix = Date.now().toString();
-  const categoryResponse = await page.request.post("/api/v1/categories", {
-    data: { name: `Categoría producto ${suffix}` },
-    headers,
-  });
-  expect(categoryResponse.status()).toBe(201);
-  const category = await categoryResponse.json();
-  const warehouseResponse = await page.request.post("/api/v1/warehouses", {
-    data: { code: `PR-${suffix}`, name: `Bodega producto ${suffix}` },
-    headers,
-  });
-  expect(warehouseResponse.status()).toBe(201);
-  return { suffix, category };
+  return { suffix, category: categories[0] };
 }
 
 test("administrator manages products and the interface adapts to required viewports", async ({

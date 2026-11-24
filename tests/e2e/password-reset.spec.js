@@ -14,7 +14,7 @@ const visualDirectory = join(tmpdir(), "opencode", "sigecom-6.1b-visual");
 
 test.use({ trace: "off", screenshot: "off", video: "off" });
 
-test("administrator resets a password and the user completes the mandatory change", async ({
+test("administrator requests a reset link, revokes prior access, and reports simulated delivery", async ({
   page,
   browser,
 }) => {
@@ -23,7 +23,6 @@ test("administrator resets a password and the user completes the mandatory chang
   const suffix = randomBytes(8).toString("hex");
   const email = `password-reset-e2e-${suffix}@sigecom.invalid`;
   const originalPassword = randomBytes(32).toString("base64url");
-  const finalPassword = `E2e-2026-${randomBytes(24).toString("base64url")}!`;
   let userId;
   let previousContext;
   let recipientContext;
@@ -129,20 +128,16 @@ test("administrator resets a password and the user completes the mandatory chang
     await confirmation
       .getByRole("button", { name: "Confirmar restablecimiento" })
       .click();
-    const delivery = page.getByRole("dialog", {
-      name: "Entrega segura de contraseña",
-    });
-    const temporaryPassword = await delivery
-      .locator(".user-secret-value")
-      .innerText();
-    await delivery
-      .getByRole("button", { name: "Cerrar entrega segura" })
-      .click();
-    await delivery
-      .getByRole("button", { name: "Descartar contraseña" })
-      .click();
-    expect(temporaryPassword).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(temporaryPassword).not.toBe(originalPassword);
+    await expect(page.getByRole("status")).toContainText(
+      /simulado.*no se envió ningún correo.*cuenta sigue pendiente de restablecimiento/i,
+    );
+    const [[stored]] = await pool.execute(
+      `SELECT credential_state, password_change_required
+       FROM users WHERE id = ?`,
+      [userId],
+    );
+    expect(stored.credential_state).toBe("pending_admin_reset");
+    expect(Number(stored.password_change_required)).toBe(1);
     expect(
       await previousPage.evaluate(
         async () =>
@@ -161,33 +156,16 @@ test("administrator resets a password and the user completes the mandatory chang
       .fill(originalPassword);
     await recipient.getByRole("button", { name: "Ingresar" }).click();
     await expect(recipient.getByRole("alert")).toContainText("incorrectos");
-
-    await recipient
-      .getByRole("textbox", { name: "Contraseña" })
-      .fill(temporaryPassword);
-    await recipient.getByRole("button", { name: "Ingresar" }).click();
-    await expect(recipient).toHaveURL(/\/cambio-obligatorio$/);
-    await recipient.getByLabel("Contraseña actual").fill(temporaryPassword);
-    await recipient
-      .getByRole("textbox", { name: "Nueva contraseña", exact: true })
-      .fill(finalPassword);
-    await recipient
-      .getByLabel("Confirmar nueva contraseña")
-      .fill(finalPassword);
-    await recipient
-      .getByRole("button", { name: "Cambiar contraseña y continuar" })
-      .click();
-    await expect(recipient).toHaveURL(/\/ingresar$/);
-    await recipient.getByLabel("Correo electrónico").fill(email);
-    await recipient
-      .getByRole("textbox", { name: "Contraseña" })
-      .fill(finalPassword);
-    await recipient.getByRole("button", { name: "Ingresar" }).click();
-    await expect(recipient).toHaveURL(/\/inicio$/);
   } finally {
     await previousContext?.close();
     await recipientContext?.close();
     if (userId) {
+      await pool.execute(
+        `UPDATE account_access_tokens
+         SET revoked_at = UTC_TIMESTAMP(3)
+         WHERE user_id = ? AND revoked_at IS NULL`,
+        [userId],
+      );
       await pool.execute(
         "UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP(3) WHERE user_id = ? AND revoked_at IS NULL",
         [userId],

@@ -29,6 +29,16 @@ async function signInApi(apiContext, email) {
     headers: { "X-CSRF-Token": csrfToken },
   });
   expect(response.status()).toBe(200);
+  const sessionHeader = (await response.headersArray()).find(
+    ({ name, value }) =>
+      name.toLowerCase() === "set-cookie" &&
+      value.startsWith("sigecom_session="),
+  );
+  expect(sessionHeader).toBeTruthy();
+  const token = sessionHeader.value
+    .slice("sigecom_session=".length)
+    .split(";")[0];
+  return { token, cookie: `sigecom_session=${token}` };
 }
 
 async function openRolePermissions(page) {
@@ -57,8 +67,6 @@ test("administrator removes a role permission, affected session is revoked, then
   let originalCreatedAt;
   let roleId;
   let permissionId;
-  let adminId;
-  let addedAdminWarehouseIds = [];
   try {
     const [[database]] = await pool.query("SELECT DATABASE() AS name");
     expect(database.name).toBe("sigecom_test");
@@ -76,41 +84,12 @@ test("administrator removes a role permission, affected session is revoked, then
     roleId = role.id;
     permissionId = permission.id;
     originalCreatedAt = assignment.created_at;
-    const [[admin]] = await pool.execute(
-      "SELECT id FROM users WHERE email = ?",
-      [adminEmail],
-    );
-    adminId = admin.id;
-    const [currentAdminWarehouses] = await pool.execute(
-      "SELECT warehouse_id FROM user_warehouses WHERE user_id = ?",
-      [adminId],
-    );
-    const currentAdminWarehouseIds = new Set(
-      currentAdminWarehouses.map((item) => String(item.warehouse_id)),
-    );
-    const [sellerWarehouses] = await pool.execute(
-      `SELECT DISTINCT uw.warehouse_id FROM users u
-       JOIN user_warehouses uw ON uw.user_id = u.id WHERE u.role_id = ?
-       ORDER BY uw.warehouse_id`,
-      [roleId],
-    );
-    addedAdminWarehouseIds = sellerWarehouses
-      .map((item) => String(item.warehouse_id))
-      .filter((id) => !currentAdminWarehouseIds.has(id));
-    for (const warehouseId of addedAdminWarehouseIds) {
-      await pool.execute(
-        "INSERT INTO user_warehouses (user_id, warehouse_id) VALUES (?, ?)",
-        [adminId, warehouseId],
-      );
-    }
-
-    await signInApi(auditorApi, auditorEmail);
-    const auditorCookie = (await auditorApi.storageState()).cookies.find(
-      (cookie) => cookie.name === "sigecom_session",
-    );
-    expect(auditorCookie).toBeTruthy();
+    const auditorSessionCookie = await signInApi(auditorApi, auditorEmail);
     const claims = JSON.parse(
-      Buffer.from(auditorCookie.value.split(".")[1], "base64url").toString(),
+      Buffer.from(
+        auditorSessionCookie.token.split(".")[1],
+        "base64url",
+      ).toString(),
     );
     const tokenHash = createHash("sha256").update(claims.jti).digest("hex");
     const [[auditorSession]] = await pool.execute(
@@ -130,7 +109,17 @@ test("administrator removes a role permission, affected session is revoked, then
     await expect(
       page.getByRole("heading", { name: "Se retirarán (1)" }),
     ).toBeVisible();
+    const removePermissionResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/roles/auditor/permissions") &&
+        response.request().method() === "PATCH",
+    );
     await page.getByRole("button", { name: "Confirmar y guardar" }).click();
+    const removePermission = await removePermissionResponse;
+    expect(removePermission.status()).toBe(200);
+    expect((await removePermission.json()).revokedSessionCount).toBeGreaterThan(
+      0,
+    );
     await expect(readSuppliers).not.toBeChecked();
 
     const [[sessionAfterUpdate]] = await pool.execute(
@@ -140,11 +129,15 @@ test("administrator removes a role permission, affected session is revoked, then
     expect(Number(sessionAfterUpdate.id)).toBe(Number(auditorSession.id));
     expect(sessionAfterUpdate.revoked_at).not.toBeNull();
 
-    const expiredResponse = await auditorApi.get("/api/v1/auth/me");
+    const expiredResponse = await auditorApi.get("/api/v1/auth/me", {
+      headers: { Cookie: auditorSessionCookie.cookie },
+    });
     expect(expiredResponse.status()).toBe(401);
 
-    await signInApi(auditorApi, auditorEmail);
-    const deniedSuppliers = await auditorApi.get("/api/v1/suppliers");
+    const deniedSessionCookie = await signInApi(auditorApi, auditorEmail);
+    const deniedSuppliers = await auditorApi.get("/api/v1/suppliers", {
+      headers: { Cookie: deniedSessionCookie.cookie },
+    });
     expect(deniedSuppliers.status()).toBe(403);
 
     await readSuppliers.check();
@@ -152,11 +145,23 @@ test("administrator removes a role permission, affected session is revoked, then
     await expect(
       page.getByRole("heading", { name: "Se añadirán (1)" }),
     ).toBeVisible();
+    const restorePermissionResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/roles/auditor/permissions") &&
+        response.request().method() === "PATCH",
+    );
     await page.getByRole("button", { name: "Confirmar y guardar" }).click();
+    const restorePermission = await restorePermissionResponse;
+    expect(restorePermission.status()).toBe(200);
+    expect(
+      (await restorePermission.json()).revokedSessionCount,
+    ).toBeGreaterThan(0);
     await expect(readSuppliers).toBeChecked();
 
-    await signInApi(auditorApi, auditorEmail);
-    const authorizedSuppliers = await auditorApi.get("/api/v1/suppliers");
+    const authorizedSessionCookie = await signInApi(auditorApi, auditorEmail);
+    const authorizedSuppliers = await auditorApi.get("/api/v1/suppliers", {
+      headers: { Cookie: authorizedSessionCookie.cookie },
+    });
     expect(authorizedSuppliers.status()).toBe(200);
 
     await mkdir(screenshotDirectory, { recursive: true });
@@ -196,21 +201,9 @@ test("administrator removes a role permission, affected session is revoked, then
           "INSERT INTO role_permissions (role_id, permission_id, created_at) VALUES (?, ?, ?)",
           [roleId, permissionId, originalCreatedAt],
         );
-      } else {
-        await pool.execute(
-          "UPDATE role_permissions SET created_at = ? WHERE role_id = ? AND permission_id = ?",
-          [originalCreatedAt, roleId, permissionId],
-        );
       }
     }
     try {
-      if (adminId && addedAdminWarehouseIds.length) {
-        await pool.execute(
-          `DELETE FROM user_warehouses WHERE user_id = ?
-           AND warehouse_id IN (${addedAdminWarehouseIds.map(() => "?").join(",")})`,
-          [adminId, ...addedAdminWarehouseIds],
-        );
-      }
       await pool.execute(
         `UPDATE user_sessions s JOIN users u ON u.id = s.user_id
          SET s.revoked_at = UTC_TIMESTAMP(3)

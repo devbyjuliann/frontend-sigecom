@@ -118,26 +118,19 @@ test("administrator can consult the user directory at required responsive viewpo
       .getByRole("checkbox", { name: new RegExp(warehouse.name) })
       .check();
     await page.getByRole("button", { name: "Crear usuario" }).click();
-    const credentialDialog = page.getByRole("dialog", {
-      name: "Entrega segura de contraseña",
-    });
-    await expect(credentialDialog).toBeVisible();
-    const temporaryPassword = await credentialDialog
-      .locator(".user-secret-value")
-      .innerText();
-    await credentialDialog
-      .getByRole("button", { name: "Cerrar entrega segura" })
-      .click();
-    await credentialDialog
-      .getByRole("button", { name: "Descartar contraseña" })
-      .click();
-    expect(temporaryPassword).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+    await expect(page.getByRole("status")).toContainText(
+      /simulado.*no se envió ningún correo.*invitación sigue pendiente/i,
+    );
+    await expect(page.getByText(/contraseña temporal/i)).toHaveCount(0);
     await page
       .getByRole("searchbox", { name: "Buscar por nombre o correo" })
       .fill(testEmail);
     await page.getByRole("button", { name: "Buscar", exact: true }).click();
     const userRow = page.getByRole("row", { name: new RegExp(testEmail) });
     await expect(userRow).toBeVisible();
+    await expect(
+      userRow.getByText("Invitación pendiente", { exact: true }),
+    ).toBeVisible();
     await userRow
       .getByRole("button", {
         name: new RegExp(`Desactivar Usuario E2E ${suffix}`),
@@ -157,6 +150,12 @@ test("administrator can consult the user directory at required responsive viewpo
         [testEmail],
       );
       if (created) {
+        await pool.execute(
+          `UPDATE account_access_tokens
+           SET revoked_at = UTC_TIMESTAMP(3)
+           WHERE user_id = ? AND revoked_at IS NULL`,
+          [created.id],
+        );
         await pool.execute(
           "UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP(3) WHERE user_id = ? AND revoked_at IS NULL",
           [created.id],
