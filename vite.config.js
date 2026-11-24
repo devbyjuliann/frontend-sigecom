@@ -60,7 +60,10 @@ export default defineConfig(({ mode }) => {
       include: ["src/**/*.{test,spec}.{js,jsx}"],
     },
     preview: {
-      allowedHosts: ["sigecom-frontend-production.up.railway.app"],
+      allowedHosts: [
+        "sigecom-frontend-production.up.railway.app",
+        "app.sigecom.site",
+      ],
       proxy: {
         "/api": {
           target: apiProxyTarget,

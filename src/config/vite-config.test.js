@@ -14,6 +14,16 @@ describe("Vite preview host configuration", () => {
     );
   });
 
+  it("allows the custom SIGECOM application domain", async () => {
+    const loaded = await loadConfigFromFile(
+      { command: "serve", mode: "production" },
+      "vite.config.js",
+      process.cwd(),
+    );
+
+    expect(loaded?.config.preview?.allowedHosts).toContain("app.sigecom.site");
+  });
+
   it("proxies preview API requests to the configured HTTPS backend", async () => {
     const key = "VITE_API_BASE_URL";
     const previousValue = process.env[key];

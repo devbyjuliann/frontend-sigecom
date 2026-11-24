@@ -148,7 +148,14 @@ describe("DashboardPage", () => {
     vi.clearAllMocks();
   });
 
-  it("shows real summary, category data, user greeting and authorized shortcuts", async () => {
+  it("does not reserve a quick-access row while dashboard data loads", () => {
+    dashboardApi.get.mockReturnValue(new Promise(() => {}));
+    const { container } = renderDashboard();
+
+    expect(container.querySelector(".dashboard-shortcuts")).toBeNull();
+  });
+
+  it("shows the real summary without redundant shortcuts", async () => {
     renderDashboard();
     expect(await screen.findByText("12")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
@@ -168,22 +175,11 @@ describe("DashboardPage", () => {
         .getAllByRole("listitem")
         .map((item) => item.textContent),
     ).toEqual(["Aseo: 7 productos.", "Ferretería: 5 productos."]);
-    expect(screen.getByRole("link", { name: "Productos" })).toHaveAttribute(
-      "href",
-      "/productos",
-    );
-    expect(screen.getByRole("link", { name: "Clientes" })).toHaveAttribute(
-      "href",
-      "/clientes",
-    );
-    expect(screen.getByRole("link", { name: "Ventas" })).toHaveAttribute(
-      "href",
-      "/ventas",
-    );
-    expect(screen.getByRole("link", { name: "Compras" })).toHaveAttribute(
-      "href",
-      "/compras",
-    );
+    expect(
+      screen.queryByRole("navigation", {
+        name: "Accesos directos autorizados",
+      }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Ventas netas del mes")).toBeInTheDocument();
     expect(screen.getByText("Compras recibidas del mes")).toBeInTheDocument();
     expect(
@@ -216,7 +212,7 @@ describe("DashboardPage", () => {
     expect(screen.getByText(/VE-2026-1/)).toBeInTheDocument();
   });
 
-  it("hides module indicators and shortcuts the current user cannot read", async () => {
+  it("hides module indicators the current user cannot read", async () => {
     renderDashboard({
       permissions: ["dashboard.read", "products.read"],
       dashboard: {
@@ -240,9 +236,6 @@ describe("DashboardPage", () => {
       },
     });
     expect(await screen.findByText("12")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Clientes" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Proveedores" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Bodegas" })).toBeNull();
     expect(screen.queryByText("Ventas netas del mes")).toBeNull();
     expect(
       screen.queryByText("Distribución de productos por categoría"),

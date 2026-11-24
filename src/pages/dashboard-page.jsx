@@ -11,14 +11,10 @@ import {
   YAxis,
 } from "recharts";
 import { AddressBook } from "@phosphor-icons/react/AddressBook";
-import { Buildings } from "@phosphor-icons/react/Buildings";
 import { Package } from "@phosphor-icons/react/Package";
-import { Receipt } from "@phosphor-icons/react/Receipt";
-import { ShoppingCart } from "@phosphor-icons/react/ShoppingCart";
 import { Tag } from "@phosphor-icons/react/Tag";
 import { Truck } from "@phosphor-icons/react/Truck";
 import { Warehouse } from "@phosphor-icons/react/Warehouse";
-import { Link } from "react-router-dom";
 import { useAuth } from "../auth/auth-context.jsx";
 import { dashboardApi } from "../lib/auth-api.js";
 import { Button } from "../components/ui/button.jsx";
@@ -35,57 +31,6 @@ const roleNames = {
   warehouse: "Bodega",
   auditor: "Auditor",
 };
-
-const shortcuts = [
-  {
-    label: "Productos",
-    path: "/productos",
-    permission: "products.read",
-    icon: Package,
-  },
-  {
-    label: "Categorías",
-    path: "/categorias",
-    permission: "categories.read",
-    icon: Tag,
-  },
-  {
-    label: "Bodegas",
-    path: "/bodegas",
-    permission: "warehouses.read",
-    icon: Warehouse,
-  },
-  {
-    label: "Clientes",
-    path: "/clientes",
-    permission: "customers.read",
-    icon: AddressBook,
-  },
-  {
-    label: "Proveedores",
-    path: "/proveedores",
-    permission: "suppliers.read",
-    icon: Truck,
-  },
-  {
-    label: "Ventas",
-    path: "/ventas",
-    permission: "sales.read",
-    icon: Receipt,
-  },
-  {
-    label: "Compras",
-    path: "/compras",
-    permission: "purchases.read",
-    icon: ShoppingCart,
-  },
-  {
-    label: "Mi perfil",
-    path: "/perfil",
-    permission: "profile.read",
-    icon: Buildings,
-  },
-];
 
 const metricDefinitions = [
   {
@@ -216,15 +161,6 @@ function LoadingDashboard({ displayName, roleName }) {
       <p className="sr-only" role="status">
         Cargando información autorizada…
       </p>
-      <div
-        className="dashboard-shortcuts dashboard-shortcuts--loading"
-        aria-hidden="true"
-      >
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
       <div
         className="dashboard-metric-grid dashboard-metric-grid--loading"
         aria-hidden="true"
@@ -780,9 +716,6 @@ export default function DashboardPage() {
       permissionSet.includes(metric.permission) &&
       dashboard.indicators[metric.key]?.available === true,
   );
-  const visibleShortcuts = shortcuts.filter((item) =>
-    permissionSet.includes(item.permission),
-  );
   const showCategoryChart =
     permissionSet.includes("products.read") &&
     permissionSet.includes("categories.read") &&
@@ -825,21 +758,6 @@ export default function DashboardPage() {
         </div>
         <span className="dashboard-role">{roleName}</span>
       </header>
-
-      {visibleShortcuts.length > 0 ? (
-        <nav
-          className="dashboard-shortcuts"
-          aria-label="Accesos directos autorizados"
-        >
-          <span className="dashboard-shortcuts-label">Ir a</span>
-          {visibleShortcuts.map(({ label, path, icon: Icon }) => (
-            <Link className="dashboard-shortcut" key={path} to={path}>
-              <Icon size={16} aria-hidden="true" />
-              {label}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
 
       {metrics.length > 0 ? (
         <section
