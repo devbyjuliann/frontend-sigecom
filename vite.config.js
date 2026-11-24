@@ -28,6 +28,11 @@ export default defineConfig(({ mode }) => {
     isolatedH2E2E || isolatedAccountAccessE2E || mockedPasswordRecovery
       ? {}
       : loadEnv(mode, process.cwd(), "");
+  const apiProxyTarget =
+    env.VITE_API_BASE_URL ||
+    env.SIGECOM_API_TARGET ||
+    process.env.SIGECOM_API_TARGET ||
+    "http://127.0.0.1:3001";
   if (env.VITE_API_BASE_URL) {
     resolveApiUrl("/api/v1/config-check", {
       apiBaseUrl: env.VITE_API_BASE_URL,
@@ -54,6 +59,16 @@ export default defineConfig(({ mode }) => {
       restoreMocks: true,
       include: ["src/**/*.{test,spec}.{js,jsx}"],
     },
+    preview: {
+      allowedHosts: ["sigecom-frontend-production.up.railway.app"],
+      proxy: {
+        "/api": {
+          target: apiProxyTarget,
+          changeOrigin: true,
+          secure: true,
+        },
+      },
+    },
     server: {
       host: "127.0.0.1",
       strictPort: true,
@@ -63,8 +78,9 @@ export default defineConfig(({ mode }) => {
             ? "http://127.0.0.1:1"
             : isolatedAccountAccessE2E
               ? process.env.SIGECOM_API_TARGET
-              : process.env.SIGECOM_API_TARGET || "http://127.0.0.1:3001",
+              : apiProxyTarget,
           changeOrigin: true,
+          secure: true,
         },
       },
     },

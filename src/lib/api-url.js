@@ -38,9 +38,18 @@ export function resolveApiUrl(path, options = {}) {
   return `${parsed.origin}${path}`;
 }
 
-export function apiUrl(path) {
+export function resolveBrowserApiUrl(path, options = {}) {
+  const { apiBaseUrl = "", production = false } = options;
   return resolveApiUrl(path, {
-    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "",
-    production: import.meta.env.PROD,
+    apiBaseUrl: production ? "" : apiBaseUrl,
+    production,
+  });
+}
+
+export function apiUrl(path) {
+  const production = import.meta.env.PROD;
+  return resolveBrowserApiUrl(path, {
+    apiBaseUrl: production ? "" : import.meta.env.VITE_API_BASE_URL || "",
+    production,
   });
 }

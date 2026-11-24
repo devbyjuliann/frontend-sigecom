@@ -1,5 +1,14 @@
 import { expect, it } from "vitest";
-import { resolveApiUrl } from "./api-url.js";
+import { resolveApiUrl, resolveBrowserApiUrl } from "./api-url.js";
+
+it("keeps production browser requests on the frontend origin for first-party cookies", () => {
+  expect(
+    resolveBrowserApiUrl("/api/v1/auth/csrf", {
+      apiBaseUrl: "https://api.example.com",
+      production: true,
+    }),
+  ).toBe("/api/v1/auth/csrf");
+});
 
 it("keeps local development requests same-origin when no API host is configured", () => {
   expect(
