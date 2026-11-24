@@ -405,6 +405,14 @@ export const purchasesApi = {
       `/api/v1/purchase-orders/${encodeURIComponent(id)}/receipts/${encodeURIComponent(receiptId)}`,
     );
   },
+  pdfUrl(id) {
+    return apiUrl(`/api/v1/purchase-orders/${encodeURIComponent(id)}/pdf`);
+  },
+  receiptPdfUrl(id, receiptId) {
+    return apiUrl(
+      `/api/v1/purchase-orders/${encodeURIComponent(id)}/receipts/${encodeURIComponent(receiptId)}/pdf`,
+    );
+  },
   receive(id, input, idempotencyKey) {
     return post(
       `/api/v1/purchase-orders/${encodeURIComponent(id)}/receipts`,
@@ -460,6 +468,9 @@ export const salesApi = {
     return post(`/api/v1/sales/${encodeURIComponent(id)}/confirmation`, input, {
       idempotencyKey,
     });
+  },
+  confirmationPdfUrl(id) {
+    return apiUrl(`/api/v1/sales/${encodeURIComponent(id)}/pdf`);
   },
   reverse(id, input, idempotencyKey) {
     return post(`/api/v1/sales/${encodeURIComponent(id)}/reversal`, input, {

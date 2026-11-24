@@ -30,6 +30,11 @@ vi.mock("../lib/auth-api.js", () => ({
     returns: vi.fn(),
     returnDocument: vi.fn(),
     createReturn: vi.fn(),
+    pdfUrl: vi.fn((id) => `/api/v1/purchase-orders/${id}/pdf`),
+    receiptPdfUrl: vi.fn(
+      (id, receiptId) =>
+        `/api/v1/purchase-orders/${id}/receipts/${receiptId}/pdf`,
+    ),
   },
 }));
 vi.mock("../auth/auth-context.jsx", () => ({ useAuth: vi.fn() }));
@@ -64,6 +69,7 @@ function renderPage(
     number: "OC-000012",
     version: 3,
     status: "confirmed",
+    confirmedAt: "2026-10-29T12:00:00.000Z",
     orderDate: "2026-10-29",
     supplierName: "Proveedor Norte",
     supplierIdentification: "900123456",
@@ -106,6 +112,47 @@ describe("PurchaseDetailPage receipts", () => {
     clearPendingOperationStorage();
     sessionStorage.clear();
     vi.clearAllMocks();
+  });
+
+  it("offers a confirmed purchase-order PDF from its detail", async () => {
+    renderPage();
+
+    const link = await screen.findByRole("link", {
+      name: "Descargar orden PDF",
+    });
+    expect(link).toHaveAttribute("href", "/api/v1/purchase-orders/12/pdf");
+    expect(link).toHaveAttribute("download");
+  });
+
+  it("offers a receipt PDF from the persisted receipt history", async () => {
+    renderPage({}, undefined, [
+      {
+        id: "55",
+        reference: "REC-55",
+        receivedAt: "2026-10-30T12:00:00.000Z",
+        receivedByName: "Admin Compras",
+        lines: [
+          {
+            id: "71",
+            name: "Arroz",
+            sku: "ARR-1",
+            unit: "bulto",
+            quantity: 4,
+            returnedQuantity: 0,
+            returnableQuantity: 4,
+          },
+        ],
+      },
+    ]);
+
+    fireEvent.click(await screen.findByText("REC-55"));
+    const link = await screen.findByRole("link", {
+      name: "Descargar recepción PDF",
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "/api/v1/purchase-orders/12/receipts/55/pdf",
+    );
   });
 
   it("keeps an inactive-warehouse order readable but hides receipt actions", async () => {

@@ -430,6 +430,14 @@ export default function SaleDetailPage() {
           <p>Documento comercial · versión {document.version}</p>
         </div>
         <div className="sale-detail-actions">
+          {document.confirmedAt ? (
+            <Button asChild variant="secondary">
+              <a href={salesApi.confirmationPdfUrl(id)} download>
+                <DownloadSimple size={17} aria-hidden="true" />
+                Descargar venta PDF
+              </a>
+            </Button>
+          ) : null}
           {canConfirm ? (
             <Dialog.Root
               open={confirmOpen}

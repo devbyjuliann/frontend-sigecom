@@ -20,7 +20,18 @@ test("administrador consulta Compras en escritorio y móvil", async ({
   });
   expect(login.status()).toBe(200);
 
+  const ordersResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === "/api/v1/purchase-orders" &&
+      response.request().method() === "GET"
+    );
+  });
   await page.goto("/compras", { waitUntil: "commit" });
+  const ordersResponse = await ordersResponsePromise;
+  expect(ordersResponse.ok()).toBe(true);
+  const orderList = await ordersResponse.json();
+  expect(Array.isArray(orderList.items)).toBe(true);
   await expect(
     page.getByRole("heading", { name: "Órdenes de compra" }),
   ).toBeVisible();
@@ -28,7 +39,22 @@ test("administrador consulta Compras en escritorio y móvil", async ({
   await expect(
     page.getByRole("searchbox", { name: "Buscar órdenes" }),
   ).toBeVisible();
-  await expect(page.getByText("Aún no hay órdenes de compra")).toBeVisible();
+  if (orderList.items.length === 0) {
+    expect(orderList.pagination.total).toBe(0);
+    await expect(page.getByText("Aún no hay órdenes de compra")).toBeVisible();
+  } else {
+    expect(Number(orderList.pagination.total)).toBeGreaterThan(0);
+    const ordersTable = page.getByRole("region", {
+      name: "Órdenes de compra",
+    });
+    await expect(ordersTable).toBeVisible();
+    await expect(ordersTable.getByRole("row")).toHaveCount(
+      orderList.items.length + 1,
+    );
+    await expect(page.getByLabel("Paginación de órdenes")).toContainText(
+      `${orderList.pagination.total} órdenes`,
+    );
+  }
 
   await mkdir(screenshotDirectory, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 900 });

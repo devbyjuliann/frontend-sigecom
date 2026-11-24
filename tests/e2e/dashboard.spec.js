@@ -55,6 +55,36 @@ const dashboardVisualFixture = {
     ],
   },
 };
+const largeCategoryFixture = {
+  ...dashboardVisualFixture,
+  indicators: {
+    ...dashboardVisualFixture.indicators,
+    activeProducts: { available: true, value: 78 },
+  },
+  productsByCategory: {
+    available: true,
+    items: Array.from({ length: 12 }, (_, index) => ({
+      categoryId: `fixture-large-${index + 1}`,
+      categoryName: `Categoría ${index + 1}`,
+      activeProducts: index + 1,
+    })),
+  },
+};
+const largeWarehouseFixture = {
+  ...dashboardVisualFixture,
+  commercial: {
+    inventoryByWarehouse: {
+      available: true,
+      items: Array.from({ length: 12 }, (_, index) => ({
+        warehouseId: `fixture-warehouse-${index + 1}`,
+        warehouseCode: `WH-${String(index + 1).padStart(2, "0")}`,
+        warehouseName: `Bodega ${index + 1}`,
+        stockedProducts: index + 1,
+        stockedPairs: index + 1,
+      })),
+    },
+  },
+};
 
 async function signIn(page, email = administratorEmail) {
   await page.goto("/ingresar");
@@ -76,10 +106,14 @@ test("dashboard shows authorized real data and adapts to required viewports", as
     page.getByRole("navigation", { name: "Accesos directos autorizados" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Métricas aún no disponibles" }),
+    page.getByText("Productos activos", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText(/ventas y compras/i)).toBeVisible();
-  await expect(page.getByText(/movimientos y valorización/i)).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Tendencia de ventas" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Inventario por bodega" }),
+  ).toBeVisible();
   await expect(
     page
       .getByRole("navigation", { name: "Accesos directos autorizados" })
@@ -157,7 +191,9 @@ test("seller dashboard limits shortcuts and indicators to role permissions", asy
       .getByRole("link", { name: "Bodegas", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Proveedores registrados")).toHaveCount(0);
-  await expect(page.getByText("Bodegas asignadas")).toBeVisible();
+  await expect(
+    page.getByText("Bodegas asignadas", { exact: true }),
+  ).toBeVisible();
 });
 
 test("empty category state remains clear at the required viewports", async ({
@@ -267,4 +303,57 @@ test("category chart renders an isolated visual fixture responsively", async ({
       fullPage: true,
     });
   }
+});
+
+test("category chart summarizes the long tail for large real datasets", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/dashboard", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(largeCategoryFixture),
+    }),
+  );
+  await signIn(page);
+
+  await expect(
+    page.getByText("78 productos activos · 12 categorías"),
+  ).toBeVisible();
+  const categoryValues = page.getByRole("list", {
+    name: "Valores de productos por categoría",
+  });
+  await expect(categoryValues.locator("li")).toHaveCount(9);
+  await expect(categoryValues.locator("li").first()).toHaveText(
+    "Categoría 12: 12 productos.",
+  );
+  await expect(categoryValues.locator("li").last()).toHaveText(
+    "Otras categorías (4): 10 productos.",
+  );
+});
+
+test("warehouse chart stays compact while retaining every authorized detail", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/dashboard", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(largeWarehouseFixture),
+    }),
+  );
+  await signIn(page);
+
+  const warehousePanel = page.getByRole("region", {
+    name: "Inventario por bodega",
+  });
+  await expect(warehousePanel.getByText(/Top 8 de 12 bodegas/)).toBeVisible();
+  await expect(warehousePanel.locator(".recharts-bar-rectangle")).toHaveCount(
+    8,
+  );
+  const warehouseDetails = warehousePanel.getByRole("list", {
+    name: "Existencias autorizadas por bodega",
+  });
+  await expect(warehouseDetails.locator("li")).toHaveCount(12);
+  await expect(warehouseDetails.locator("li").first()).toContainText("WH-01");
 });

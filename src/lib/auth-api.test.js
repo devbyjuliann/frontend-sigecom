@@ -624,6 +624,7 @@ describe("salesApi", () => {
       "sale-cancel-key",
     );
     await salesApi.confirm("4", { expectedVersion: 2 }, "sale-confirm-key");
+    expect(salesApi.confirmationPdfUrl("4")).toBe("/api/v1/sales/4/pdf");
     const reversalInput = {
       expectedVersion: 3,
       reason: "No salió",
@@ -760,6 +761,10 @@ describe("purchasesApi", () => {
 
     await purchasesApi.list({ page: 2, q: "OC-15", status: "confirmed" });
     await purchasesApi.get("15");
+    expect(purchasesApi.pdfUrl("15")).toBe("/api/v1/purchase-orders/15/pdf");
+    expect(purchasesApi.receiptPdfUrl("15", "21")).toBe(
+      "/api/v1/purchase-orders/15/receipts/21/pdf",
+    );
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,

@@ -23,6 +23,7 @@ vi.mock("../lib/auth-api.js", () => ({
     get: vi.fn(),
     cancel: vi.fn(),
     confirm: vi.fn(),
+    confirmationPdfUrl: vi.fn((id) => `/api/v1/sales/${id}/pdf`),
     reverse: vi.fn(),
     getReversal: vi.fn(),
     reversalPdfUrl: vi.fn((id) => `/api/v1/sales/${id}/reversal/pdf`),
@@ -133,6 +134,20 @@ describe("SaleDetailPage", () => {
     expect(
       screen.queryByRole("button", { name: /cancelar borrador/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("offers the commercial PDF only after the sale has been confirmed", async () => {
+    renderDetail(["sales.read"], {
+      ...draft,
+      status: "confirmed",
+      confirmedAt: "2026-10-30T12:10:00.000Z",
+    });
+
+    const link = await screen.findByRole("link", {
+      name: "Descargar venta PDF",
+    });
+    expect(link).toHaveAttribute("href", "/api/v1/sales/12/pdf");
+    expect(link).toHaveAttribute("download");
   });
 
   it("keeps an inactive-warehouse draft readable but hides operational actions", async () => {

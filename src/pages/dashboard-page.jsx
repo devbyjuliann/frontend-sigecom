@@ -130,6 +130,13 @@ const commercialMetricDefinitions = [
     note: "Costo documentado de las recepciones del período.",
   },
   {
+    key: "inventoryValue",
+    label: "Valor estimado del inventario",
+    permissions: ["inventory.read", "products.read"],
+    format: formatExactCop,
+    note: "Saldo por costo de compra vigente; estimación operativa no contable.",
+  },
+  {
     key: "stockedProducts",
     label: "Productos con existencias",
     permission: "inventory.read",
@@ -156,6 +163,7 @@ const categoryChartConfig = {
     color: "var(--chart-1)",
   },
 };
+const maxDashboardChartItems = 8;
 
 function greetingForNow() {
   const hour = Number(
@@ -245,7 +253,19 @@ function CategoryChart({ items }) {
   );
   const total = sortedItems.reduce((sum, item) => sum + item.activeProducts, 0);
   const hasDistribution = sortedItems.length > 0 && total > 0;
-  const chartHeight = Math.max(sortedItems.length * 48 + 24, 216);
+  const chartItems = sortedItems.slice(0, maxDashboardChartItems);
+  const remainingItems = sortedItems.slice(maxDashboardChartItems);
+  if (remainingItems.length > 0) {
+    chartItems.push({
+      categoryId: "other-categories",
+      categoryName: `Otras categorías (${remainingItems.length})`,
+      activeProducts: remainingItems.reduce(
+        (sum, item) => sum + item.activeProducts,
+        0,
+      ),
+    });
+  }
+  const chartHeight = Math.max(chartItems.length * 48 + 24, 216);
 
   return (
     <section
@@ -282,7 +302,7 @@ function CategoryChart({ items }) {
               style={{ height: chartHeight }}
             >
               <BarChart
-                data={sortedItems}
+                data={chartItems}
                 layout="vertical"
                 margin={{ top: 10, right: 34, bottom: 8, left: -8 }}
                 accessibilityLayer
@@ -348,7 +368,7 @@ function CategoryChart({ items }) {
           <figcaption className="sr-only">
             Distribución real de {formatCount(total)} productos activos en{" "}
             {formatCount(items.length)} categorías.{" "}
-            {sortedItems
+            {chartItems
               .map(
                 (item) =>
                   `${item.categoryName}: ${formatCount(item.activeProducts)} productos.`,
@@ -359,7 +379,7 @@ function CategoryChart({ items }) {
             className="sr-only"
             aria-label="Valores de productos por categoría"
           >
-            {sortedItems.map((item) => (
+            {chartItems.map((item) => (
               <li key={item.categoryId}>
                 {item.categoryName}: {formatCount(item.activeProducts)}{" "}
                 productos.
@@ -527,7 +547,15 @@ function TopProductsPanel({ items }) {
 }
 
 function WarehouseStockPanel({ items }) {
-  const chartHeight = Math.max(items.length * 42 + 24, 150);
+  const chartItems = [...items]
+    .sort(
+      (first, second) =>
+        second.stockedProducts - first.stockedProducts ||
+        second.stockedPairs - first.stockedPairs ||
+        first.warehouseCode.localeCompare(second.warehouseCode, "es-CO"),
+    )
+    .slice(0, maxDashboardChartItems);
+  const chartHeight = Math.max(chartItems.length * 42 + 24, 150);
   return (
     <section
       className="dashboard-panel dashboard-commercial-panel"
@@ -536,7 +564,11 @@ function WarehouseStockPanel({ items }) {
       <div className="dashboard-panel-heading">
         <div>
           <h3 id="warehouse-stock-title">Inventario por bodega</h3>
-          <p>Productos distintos con existencias positivas</p>
+          <p>
+            {items.length > chartItems.length
+              ? `Top ${chartItems.length} de ${items.length} bodegas · productos distintos con existencias positivas`
+              : "Productos distintos con existencias positivas"}
+          </p>
         </div>
       </div>
       {items.length ? (
@@ -555,7 +587,7 @@ function WarehouseStockPanel({ items }) {
             style={{ height: chartHeight }}
           >
             <BarChart
-              data={items}
+              data={chartItems}
               layout="vertical"
               margin={{ top: 8, right: 30, bottom: 8, left: 4 }}
               accessibilityLayer
@@ -757,7 +789,9 @@ export default function DashboardPage() {
     dashboard.productsByCategory.available === true;
   const commercialMetrics = commercialMetricDefinitions.filter(
     (metric) =>
-      permissionSet.includes(metric.permission) &&
+      (metric.permissions || [metric.permission]).every((permission) =>
+        permissionSet.includes(permission),
+      ) &&
       permissionSet.includes("warehouses.read") &&
       dashboard.commercial?.[metric.key]?.available === true,
   );

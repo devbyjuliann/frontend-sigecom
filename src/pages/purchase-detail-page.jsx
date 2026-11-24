@@ -7,6 +7,7 @@ import { Warning } from "@phosphor-icons/react/Warning";
 import { Package } from "@phosphor-icons/react/Package";
 import { ClockCounterClockwise } from "@phosphor-icons/react/ClockCounterClockwise";
 import { ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
+import { DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -616,6 +617,14 @@ export default function PurchaseDetailPage() {
             </p>
           ) : null}
           <div className="purchase-detail-actions">
+            {item.confirmedAt ? (
+              <Button asChild variant="secondary">
+                <a href={purchasesApi.pdfUrl(id)} download>
+                  <DownloadSimple size={17} aria-hidden="true" />
+                  Descargar orden PDF
+                </a>
+              </Button>
+            ) : null}
             {item.status === "draft" && canEdit ? (
               <Button asChild variant="secondary">
                 <Link to={`/compras/${id}/editar`}>
@@ -768,6 +777,15 @@ export default function PurchaseDetailPage() {
                         </strong>
                       </p>
                     ))}
+                    <Button asChild variant="secondary">
+                      <a
+                        href={purchasesApi.receiptPdfUrl(id, receipt.id)}
+                        download
+                      >
+                        <DownloadSimple size={17} aria-hidden="true" />
+                        Descargar recepción PDF
+                      </a>
+                    </Button>
                     {canReturn &&
                     receipt.lines.some(
                       (line) => line.returnableQuantity > 0,

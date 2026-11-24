@@ -41,6 +41,7 @@ const completeDashboard = {
     },
     salesNet: { available: true, value: "110.00" },
     purchasesReceived: { available: true, value: "80.25" },
+    inventoryValue: { available: true, value: "825.50" },
     stockedProducts: { available: true, value: 6 },
     lowStockProducts: { available: true, value: 2 },
     pendingReceipts: { available: true, value: 3 },
@@ -105,6 +106,7 @@ function renderDashboard({
     "sales.read",
     "purchases.read",
     "inventory.read",
+    "products.read",
   ],
   userId = "user-1",
   dashboard = completeDashboard,
@@ -190,6 +192,12 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Productos con stock bajo")).toBeInTheDocument();
     expect(screen.getByText("Productos con existencias")).toBeInTheDocument();
     expect(
+      screen.getByText("Valor estimado del inventario"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Valor estimado del inventario").closest("article"),
+    ).toHaveTextContent(/825,50/);
+    expect(
       screen.getByRole("heading", { name: "Tendencia de ventas" }),
     ).toBeInTheDocument();
     expect(
@@ -224,6 +232,7 @@ describe("DashboardPage", () => {
           period: completeDashboard.commercial.period,
           salesNet: { available: false, value: null },
           purchasesReceived: { available: false, value: null },
+          inventoryValue: { available: false, value: null },
           stockedProducts: { available: false, value: null },
           lowStockProducts: { available: false, value: null },
           pendingReceipts: { available: false, value: null },
