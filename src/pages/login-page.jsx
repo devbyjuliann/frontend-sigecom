@@ -10,6 +10,7 @@ import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { useAuth } from "../auth/auth-context.jsx";
 import { ApiError } from "../lib/auth-api.js";
+import sigecomLogo from "../assets/brand/sigecom-logo-white.png";
 
 const schema = z.object({
   email: z.string().trim().email("Escribe un correo válido.").max(254),
@@ -18,18 +19,19 @@ const schema = z.object({
 
 function BrandMark({ compact = false }) {
   return (
-    <div className="flex items-center gap-3" translate="no">
-      <span
-        className={`grid size-11 shrink-0 place-items-center rounded-xl shadow-sm ${compact ? "bg-brand text-white" : "bg-white text-brand"}`}
-      >
-        <span className="text-xl font-extrabold tracking-[-0.08em]">S</span>
-      </span>
-      <span className="min-w-0">
-        <span className="block text-lg font-bold leading-5 tracking-[-0.03em]">
-          SIGECOM
-        </span>
+    <div
+      className={`login-brand-lockup${compact ? " login-brand-lockup--compact" : ""}`}
+      translate="no"
+    >
+      <img
+        className="login-brand-lockup__logo"
+        src={sigecomLogo}
+        alt="Logo SIGECOM"
+      />
+      <span className="login-brand-lockup__copy">
+        <span className="login-brand-lockup__name">SIGECOM</span>
         {!compact ? (
-          <span className="mt-1 block text-xs font-medium text-white/70">
+          <span className="login-brand-lockup__descriptor">
             Sistema de Gestión Comercial
           </span>
         ) : null}
@@ -91,15 +93,6 @@ export default function LoginPage() {
             Accede a las herramientas internas de Comercializadora S.A.S. con
             una sola sesión segura.
           </p>
-          <div className="warehouse-illustration" aria-hidden="true">
-            <div className="warehouse-illustration__roof" />
-            <div className="warehouse-illustration__frame">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="warehouse-illustration__floor" />
-          </div>
         </div>
         <p className="login-brand__footnote">
           Acceso interno · Sesión protegida

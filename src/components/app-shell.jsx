@@ -20,6 +20,7 @@ import { MagnifyingGlass } from "@phosphor-icons/react/MagnifyingGlass";
 import { SignOut } from "@phosphor-icons/react/SignOut";
 import { UserCircle } from "@phosphor-icons/react/UserCircle";
 import { X } from "@phosphor-icons/react/X";
+import sigecomLogo from "../assets/brand/sigecom-logo-white.png";
 import {
   Link,
   NavLink,
@@ -163,9 +164,7 @@ function Brand({ collapsed = false }) {
       to="/inicio"
       aria-label="SIGECOM, ir a Inicio"
     >
-      <span className="shell-brand__mark" aria-hidden="true">
-        S
-      </span>
+      <img className="shell-brand__logo" src={sigecomLogo} alt="Logo SIGECOM" />
       {!collapsed ? (
         <span className="shell-brand__name" translate="no">
           SIGECOM
