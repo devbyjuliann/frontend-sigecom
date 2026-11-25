@@ -11,5 +11,6 @@
 ## Estado de publicación
 
 - El ajuste de Login y título está desplegado en el servicio frontend de Railway.
-- Se verificaron HTTPS, el título `SIGECOM`, la pantalla de Login y la disponibilidad de la API; la sesión anónima responde 401 como corresponde.
-- La autenticación exitosa en producción aún requiere una cuenta de prueba autorizada. No crear etiquetas ni Releases `v1.0.0` hasta verificarla.
+- El despliegue `0a6f5554-fdcf-44fc-996b-87f04f97285a` está en estado `SUCCESS`; Railway no expone un SHA en sus metadatos. El árbol fuente usado para cargarlo correspondía a `0f24ec0b06f622f34d0ff3ea2649d5126d159ff0`.
+- En producción se verificaron CSRF, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` y el Dashboard con respuestas exitosas. El único 401 fue la consulta anónima previa al ingreso.
+- La etiqueta anotada `v1.0.0` apunta a `32d4d47fa34887d4df5a6206726158162d2737aa`. Release: https://github.com/devbyjuliann/frontend-sigecom/releases/tag/v1.0.0
