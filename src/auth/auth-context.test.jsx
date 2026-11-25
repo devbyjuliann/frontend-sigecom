@@ -26,6 +26,7 @@ afterEach(() => {
   cleanup();
   clearPendingOperationStorage();
   sessionStorage.clear();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -216,6 +217,50 @@ function RecoverySessionProbe() {
     </>
   );
 }
+
+function SessionStatusProbe() {
+  const { session, isLoading } = useAuth();
+  const status = isLoading
+    ? "Cargando sesión"
+    : session
+      ? "Sesión activa"
+      : "Sin sesión";
+  return <p>{status}</p>;
+}
+
+it("stops polling the session after an unauthenticated response", async () => {
+  vi.useFakeTimers();
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const me = vi.spyOn(authApi, "me").mockRejectedValue(
+    new ApiError({
+      status: 401,
+      code: "SESSION_INVALID",
+      message: "Inicia sesión.",
+    }),
+  );
+
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <SessionStatusProbe />
+      </AuthProvider>
+    </QueryClientProvider>,
+  );
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(screen.getByText("Sin sesión")).toBeInTheDocument();
+  expect(me).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(120_000);
+  });
+  expect(me).toHaveBeenCalledTimes(1);
+  client.clear();
+});
 
 it("clears authenticated query data and pending operations after password recovery", async () => {
   const client = new QueryClient({

@@ -17,6 +17,17 @@ import {
 
 const AuthContext = createContext(null);
 export const authQueryKey = ["auth", "me"];
+const sessionRefreshIntervalMs = 60_000;
+
+export function getSessionRefetchInterval(query) {
+  if (
+    query.state.error instanceof ApiError &&
+    query.state.error.status === 401
+  ) {
+    return false;
+  }
+  return sessionRefreshIntervalMs;
+}
 
 export function AuthProvider({ children }) {
   const queryClient = useQueryClient();
@@ -35,7 +46,7 @@ export function AuthProvider({ children }) {
     retry: false,
     staleTime: 0,
     refetchOnWindowFocus: true,
-    refetchInterval: 60_000,
+    refetchInterval: getSessionRefetchInterval,
   });
 
   const session = locallyLoggedOut
