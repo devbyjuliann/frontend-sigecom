@@ -6,6 +6,15 @@ const htmlPath = join(process.cwd(), "index.html");
 const faviconPath = join(process.cwd(), "public", "favicon.svg");
 
 describe("SIGECOM favicon", () => {
+  it("uses only SIGECOM as the browser tab title", () => {
+    const html = readFileSync(htmlPath, "utf8");
+    const titles = [...html.matchAll(/<title>(.*?)<\/title>/gi)].map(
+      ([, title]) => title.trim(),
+    );
+
+    expect(titles).toEqual(["SIGECOM"]);
+  });
+
   it("links the application document to the branded icon asset", () => {
     expect(existsSync(faviconPath)).toBe(true);
 

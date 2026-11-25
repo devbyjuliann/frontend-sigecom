@@ -202,18 +202,19 @@ p {
   font-size: 12px;
 }
 .login-form-panel {
-  display: flex;
+  display: grid;
   min-width: 0;
   min-height: 100vh;
-  flex-direction: column;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
   padding: 44px clamp(28px, 7vw, 112px) 24px;
 }
 .login-mobile-brand {
   display: none;
 }
 .login-form-wrap {
+  grid-row: 2;
   width: min(100%, 410px);
 }
 .login-heading {
@@ -301,9 +302,12 @@ p {
   color: #64748b;
   font-size: 12px;
   line-height: 1.65;
+  text-align: center;
 }
 .login-copyright {
-  margin: auto 0 0;
+  grid-row: 4;
+  align-self: end;
+  margin: 0;
   padding-top: 34px;
   color: #64748b;
   font-size: 11px;
@@ -1746,24 +1750,27 @@ p {
   }
   .login-form-panel {
     min-height: 100svh;
-    justify-content: flex-start;
+    grid-template-rows: minmax(0, 1fr) auto auto minmax(0, 1fr) auto;
     padding: max(24px, env(safe-area-inset-top)) 24px
       max(20px, env(safe-area-inset-bottom));
   }
   .login-mobile-brand {
     display: flex;
+    grid-row: 2;
     width: min(100%, 410px);
     align-items: center;
-    margin: 9px 0 clamp(48px, 14vh, 112px);
+    margin: 0 0 clamp(24px, 5vh, 36px);
     color: #1f3a8a;
   }
-  .login-copyright {
-    width: 100%;
-    margin-top: auto;
-    padding-top: 38px;
+  .login-form-wrap {
+    grid-row: 3;
+    margin-inline: auto;
   }
-  .login-security-note {
-    text-align: center;
+  .login-copyright {
+    grid-row: 5;
+    width: 100%;
+    margin-top: 0;
+    padding-top: 38px;
   }
 }
 
@@ -2876,36 +2883,8 @@ p {
 }
 
 @media (max-width: 760px) {
-  .login-page {
-    min-height: 100svh;
-    grid-template-columns: 1fr;
-  }
-  .login-brand {
-    display: none;
-  }
-  .login-form-panel {
-    min-height: 100svh;
-    justify-content: flex-start;
-    padding: max(24px, env(safe-area-inset-top)) 24px
-      max(20px, env(safe-area-inset-bottom));
-  }
-  .login-mobile-brand {
-    display: flex;
-    width: min(100%, 410px);
-    align-items: center;
-    margin: 9px 0 clamp(48px, 14vh, 112px);
-    color: #1f3a8a;
-  }
-  .login-form-wrap {
-    margin-inline: auto;
-  }
   .login-heading h1 {
     font-size: 28px;
-  }
-  .login-copyright {
-    width: 100%;
-    margin-top: auto;
-    padding-top: 38px;
   }
   .topbar {
     min-height: 68px;
@@ -2966,7 +2945,7 @@ p {
     padding-inline: 21px;
   }
   .login-mobile-brand {
-    margin-bottom: clamp(40px, 11vh, 84px);
+    margin-bottom: clamp(20px, 4vh, 28px);
   }
   .topbar {
     padding-inline: 10px;
